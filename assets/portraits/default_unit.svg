@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="768" viewBox="0 0 512 768">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2f3b49"/>
+      <stop offset="100%" stop-color="#172029"/>
+    </linearGradient>
+    <linearGradient id="armor" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#b18a5a"/>
+      <stop offset="100%" stop-color="#7c5a35"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="512" height="768" fill="url(#bg)"/>
+  <ellipse cx="256" cy="140" rx="78" ry="88" fill="#d2b18f"/>
+  <rect x="192" y="230" width="128" height="42" rx="20" fill="#8f6f4e"/>
+  <path d="M170 290 C180 240 332 240 342 290 L362 520 L150 520 Z" fill="url(#armor)"/>
+  <rect x="120" y="315" width="52" height="185" rx="24" fill="#d2b18f"/>
+  <rect x="340" y="315" width="52" height="185" rx="24" fill="#d2b18f"/>
+  <rect x="196" y="520" width="44" height="170" rx="14" fill="#5d4430"/>
+  <rect x="272" y="520" width="44" height="170" rx="14" fill="#5d4430"/>
+  <text x="256" y="735" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" fill="#d9e1ea">Unit Portrait</text>
+</svg>

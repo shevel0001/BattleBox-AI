@@ -25,6 +25,10 @@ var enemy_units: Array[Unit] = []
 
 var unit_scene: PackedScene
 var hex_tile_scene: PackedScene
+var unit_info_panel: PanelContainer
+var unit_info_stats_label: Label
+var unit_info_portrait: TextureRect
+var unit_info_name_label: Label
 
 func _ready():
 	# Load scenes
@@ -46,6 +50,7 @@ func _ready():
 	
 	# Update UI
 	update_turn_label()
+	setup_unit_info_panel()
 	
 	print("=== HEX TACTICS PROTOTYPE ===")
 	print("How to Play:")
@@ -99,6 +104,8 @@ func handle_click(mouse_pos: Vector2):
 	var clicked_unit = get_unit_at_position(local_pos)
 	
 	if clicked_unit:
+		show_unit_info(clicked_unit)
+		
 		if clicked_unit.team == Unit.Team.PLAYER and current_turn == TurnSide.PLAYER:
 			select_unit(clicked_unit)
 		elif selected_unit and selected_unit.can_attack(clicked_unit.coord):
@@ -143,6 +150,7 @@ func select_unit(unit: Unit) -> void:
 	unit.effects.on_turn_start(unit)
 	
 	selected_unit = unit
+	show_unit_info(unit)
 	show_movement_range(unit)
 
 func show_movement_range(unit: Unit) -> void:
@@ -179,6 +187,7 @@ func clear_highlights() -> void:
 func clear_selection() -> void:
 	selected_unit = null
 	clear_highlights()
+	hide_unit_info()
 
 func move_unit(unit: Unit, target_coord: Vector2i) -> void:
 	# Check if tile is occupied
@@ -288,3 +297,68 @@ func update_turn_label() -> void:
 	else:
 		label.text = "Turn: ENEMY"
 		label.modulate = Color.RED
+
+func setup_unit_info_panel() -> void:
+	unit_info_panel = PanelContainer.new()
+	unit_info_panel.name = "UnitInfoPanel"
+	unit_info_panel.position = Vector2(10, 50)
+	unit_info_panel.custom_minimum_size = Vector2(230, 360)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 10)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
+	unit_info_panel.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	margin.add_child(vbox)
+	
+	var title = Label.new()
+	title.text = "Unit Info"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	vbox.add_child(title)
+	
+	unit_info_stats_label = Label.new()
+	unit_info_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(unit_info_stats_label)
+	
+	unit_info_portrait = TextureRect.new()
+	unit_info_portrait.custom_minimum_size = Vector2(180, 190)
+	unit_info_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	unit_info_portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.add_child(unit_info_portrait)
+	
+	unit_info_name_label = Label.new()
+	unit_info_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	unit_info_name_label.add_theme_font_size_override("font_size", 18)
+	vbox.add_child(unit_info_name_label)
+	
+	ui_layer.add_child(unit_info_panel)
+	unit_info_panel.visible = false
+
+func show_unit_info(unit: Unit) -> void:
+	if not unit_info_panel:
+		return
+	
+	var team_name = "Player"
+	if unit.team == Unit.Team.ENEMY:
+		team_name = "Enemy"
+	
+	unit_info_stats_label.text = "Team: %s\nHP: %d/%d\nMove: %d\nAttack: %d (Range %d)" % [
+		team_name,
+		unit.hp,
+		unit.max_hp,
+		unit.move_points,
+		unit.attack_damage,
+		unit.attack_range
+	]
+	unit_info_portrait.texture = unit.portrait
+	unit_info_name_label.text = "Name: %s" % unit.name
+	unit_info_panel.visible = true
+
+func hide_unit_info() -> void:
+	if unit_info_panel:
+		unit_info_panel.visible = false

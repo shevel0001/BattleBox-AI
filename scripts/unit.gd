@@ -13,6 +13,7 @@ enum Team {
 @export var move_points: int = 3
 @export var attack_range: int = 1
 @export var attack_damage: int = 5
+@export var portrait: Texture2D
 
 var hp: int
 var coord: Vector2i = Vector2i.ZERO
