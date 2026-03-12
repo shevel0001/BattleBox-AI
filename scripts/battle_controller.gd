@@ -3,6 +3,8 @@
 extends Node2D
 class_name BattleController
 
+const EffectsScript = preload("res://scripts/effects.gd")
+
 enum TurnSide {
 	PLAYER,
 	ENEMY
@@ -64,7 +66,7 @@ func spawn_units():
 	
 	# Apply poison to one enemy for demonstration
 	if enemy_units.size() > 0:
-		var poison = PoisonEffect.new(3)
+		var poison = EffectsScript.PoisonEffect.new(3)
 		enemy_units[0].effects.add_effect(poison)
 
 func spawn_unit(team: Unit.Team, coord: Vector2i, unit_name: String) -> Unit:
