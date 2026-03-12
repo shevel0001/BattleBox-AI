@@ -4,6 +4,13 @@ extends Node2D
 class_name BattleController
 
 const EffectsScript = preload("res://scripts/effects.gd")
+const DEFAULT_UNIT_PORTRAIT: Texture2D = preload("res://assets/portraits/default_unit.svg")
+const PORTRAIT_BY_UNIT_NAME := {
+	"Player1": "res://assets/portraits/player1.png",
+	"Player2": "res://assets/portraits/player2.png",
+	"Enemy1": "res://assets/portraits/enemy1.png",
+	"Enemy2": "res://assets/portraits/enemy2.png"
+}
 
 enum TurnSide {
 	PLAYER,
@@ -78,6 +85,7 @@ func spawn_unit(team: Unit.Team, coord: Vector2i, unit_name: String) -> Unit:
 	var unit = unit_scene.instantiate()
 	unit.team = team
 	unit.name = unit_name
+	unit.portrait = get_portrait_for_unit(unit_name)
 	unit.set_coord(coord)
 	unit_root.add_child(unit)
 	units.append(unit)
@@ -88,6 +96,15 @@ func spawn_unit(team: Unit.Team, coord: Vector2i, unit_name: String) -> Unit:
 		enemy_units.append(unit)
 	
 	return unit
+
+func get_portrait_for_unit(unit_name: String) -> Texture2D:
+	var portrait_path = PORTRAIT_BY_UNIT_NAME.get(unit_name, "")
+	if portrait_path != "" and ResourceLoader.exists(portrait_path):
+		var loaded_resource = load(portrait_path)
+		if loaded_resource is Texture2D:
+			return loaded_resource
+	
+	return DEFAULT_UNIT_PORTRAIT
 
 func _unhandled_input(event: InputEvent):
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
