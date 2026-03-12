@@ -13,6 +13,9 @@ enum Team {
 @export var move_points: int = 3
 @export var attack_range: int = 1
 @export var attack_damage: int = 5
+@export var unit_class: String = "warrior"
+@export var unit_level: int = 1
+@export var portrait_variant: String = "a"
 @export var portrait: Texture2D
 
 var hp: int

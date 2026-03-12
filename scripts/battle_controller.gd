@@ -5,12 +5,6 @@ class_name BattleController
 
 const EffectsScript = preload("res://scripts/effects.gd")
 const DEFAULT_UNIT_PORTRAIT: Texture2D = preload("res://assets/portraits/default_unit.svg")
-const PORTRAIT_BY_UNIT_NAME := {
-	"Player1": "res://assets/portraits/player1.png",
-	"Player2": "res://assets/portraits/player2.png",
-	"Enemy1": "res://assets/portraits/enemy1.png",
-	"Enemy2": "res://assets/portraits/enemy2.png"
-}
 
 enum TurnSide {
 	PLAYER,
@@ -85,7 +79,7 @@ func spawn_unit(team: Unit.Team, coord: Vector2i, unit_name: String) -> Unit:
 	var unit = unit_scene.instantiate()
 	unit.team = team
 	unit.name = unit_name
-	unit.portrait = get_portrait_for_unit(unit_name)
+	unit.portrait = get_portrait_for_unit(unit)
 	unit.set_coord(coord)
 	unit_root.add_child(unit)
 	units.append(unit)
@@ -97,12 +91,42 @@ func spawn_unit(team: Unit.Team, coord: Vector2i, unit_name: String) -> Unit:
 	
 	return unit
 
-func get_portrait_for_unit(unit_name: String) -> Texture2D:
-	var portrait_path = PORTRAIT_BY_UNIT_NAME.get(unit_name, "")
-	if portrait_path != "" and ResourceLoader.exists(portrait_path):
-		var loaded_resource = load(portrait_path)
-		if loaded_resource is Texture2D:
-			return loaded_resource
+func get_portrait_for_unit(unit: Unit) -> Texture2D:
+	# If portrait is explicitly set on the unit resource/scene, prefer that.
+	if unit.portrait:
+		return unit.portrait
+	
+	var team_color = "blue"
+	if unit.team == Unit.Team.ENEMY:
+		team_color = "red"
+	
+	var unit_class_name = unit.unit_class.strip_edges().to_lower()
+	var variant_name = unit.portrait_variant.strip_edges().to_lower()
+	if unit_class_name == "":
+		unit_class_name = "unit"
+	if variant_name == "":
+		variant_name = "a"
+	
+	var portrait_paths = [
+		"res://assets/portraits/%s_%d%s_%s.png" % [
+			unit_class_name,
+			unit.unit_level,
+			variant_name,
+			team_color
+		],
+		"res://assets/portraits/%s %d%s %s.png" % [
+			unit.unit_class.capitalize(),
+			unit.unit_level,
+			variant_name,
+			team_color
+		]
+	]
+	
+	for portrait_path in portrait_paths:
+		if ResourceLoader.exists(portrait_path):
+			var loaded_resource = load(portrait_path)
+			if loaded_resource is Texture2D:
+				return loaded_resource
 	
 	return DEFAULT_UNIT_PORTRAIT
 
@@ -364,8 +388,10 @@ func show_unit_info(unit: Unit) -> void:
 	if unit.team == Unit.Team.ENEMY:
 		team_name = "Enemy"
 	
-	unit_info_stats_label.text = "Team: %s\nHP: %d/%d\nMove: %d\nAttack: %d (Range %d)" % [
+	unit_info_stats_label.text = "Team: %s\nClass: %s Lv.%d\nHP: %d/%d\nMove: %d\nAttack: %d (Range %d)" % [
 		team_name,
+		unit.unit_class.capitalize(),
+		unit.unit_level,
 		unit.hp,
 		unit.max_hp,
 		unit.move_points,
