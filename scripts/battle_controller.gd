@@ -63,22 +63,32 @@ func _ready():
 
 func spawn_units():
 	# Spawn 2 player units
-	spawn_unit(Unit.Team.PLAYER, Vector2i(-2, -1), "Player1")
-	spawn_unit(Unit.Team.PLAYER, Vector2i(-1, -2), "Player2")
+	spawn_unit(Unit.Team.PLAYER, Vector2i(-2, -1), "Player1", "warrior", 1, "a")
+	spawn_unit(Unit.Team.PLAYER, Vector2i(-1, -2), "Player2", "warrior", 1, "a")
 	
 	# Spawn 2 enemy units
-	spawn_unit(Unit.Team.ENEMY, Vector2i(2, 1), "Enemy1")
-	spawn_unit(Unit.Team.ENEMY, Vector2i(1, 2), "Enemy2")
+	spawn_unit(Unit.Team.ENEMY, Vector2i(2, 1), "Enemy1", "warrior", 1, "a")
+	spawn_unit(Unit.Team.ENEMY, Vector2i(1, 2), "Enemy2", "warrior", 1, "a")
 	
 	# Apply poison to one enemy for demonstration
 	if enemy_units.size() > 0:
 		var poison = EffectsScript.PoisonEffect.new(3)
 		enemy_units[0].effects.add_effect(poison)
 
-func spawn_unit(team: Unit.Team, coord: Vector2i, unit_name: String) -> Unit:
+func spawn_unit(
+	team: Unit.Team,
+	coord: Vector2i,
+	unit_name: String,
+	unit_class: String = "warrior",
+	unit_level: int = 1,
+	portrait_variant: String = "a"
+) -> Unit:
 	var unit = unit_scene.instantiate()
 	unit.team = team
 	unit.name = unit_name
+	unit.unit_class = unit_class
+	unit.unit_level = unit_level
+	unit.portrait_variant = portrait_variant
 	unit.portrait = get_portrait_for_unit(unit)
 	unit.set_coord(coord)
 	unit_root.add_child(unit)
