@@ -1,23 +1,25 @@
 ## Status effect system
+extends RefCounted
+class_name EffectManager
 
 ## Base effect class
-class_name Effect
-extends RefCounted
-
-var name: String
-var remaining_turns: int
-
-func _init(effect_name: String, duration: int):
-	name = effect_name
-	remaining_turns = duration
-
-## Called at start of unit's turn
-func on_turn_start(unit) -> void:
-	pass
-
-## Called at end of unit's turn
-func on_turn_end(unit) -> void:
-	remaining_turns -= 1
+class Effect:
+	extends RefCounted
+	
+	var name: String
+	var remaining_turns: int
+	
+	func _init(effect_name: String, duration: int):
+		name = effect_name
+		remaining_turns = duration
+	
+	## Called at start of unit's turn
+	func on_turn_start(unit) -> void:
+		pass
+	
+	## Called at end of unit's turn
+	func on_turn_end(unit) -> void:
+		remaining_turns -= 1
 
 ## Poison effect - deals damage at start of turn
 class PoisonEffect extends Effect:
@@ -30,10 +32,6 @@ class PoisonEffect extends Effect:
 	func on_turn_start(unit) -> void:
 		unit.apply_damage(tick_damage)
 		print("Poison deals %d damage to %s" % [tick_damage, unit.name])
-
-## Effect manager attached to units
-class_name EffectManager
-extends RefCounted
 
 var effects: Array[Effect] = []
 
