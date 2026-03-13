@@ -1,4 +1,6 @@
-[gd_scene load_steps=1 format=3 uid="uid://hud_001"]
+[gd_scene load_steps=2 format=3 uid="uid://hud_001"]
+
+[ext_resource type="Texture2D" path="res://assets/portraits/default_unit.svg" id="1_default_portrait"]
 
 [node name="HUD" type="Control" anchors_preset=15]
 anchors_preset = 15
@@ -66,6 +68,7 @@ text = "Unit Info"
 custom_minimum_size = Vector2(200, 160)
 expand_mode = 1
 stretch_mode = 5
+texture = ExtResource("1_default_portrait")
 
 [node name="NameLabel" type="Label" parent="UnitInfoPanel/VBox"]
 theme_override_font_sizes/font_size = 16
