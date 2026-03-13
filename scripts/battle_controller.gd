@@ -5,21 +5,14 @@ const COLS: int = 10
 const ROWS: int = 20
 const HEX_RADIUS: float = 42.0
 
-# Starting positions using offset coords (col,row), then converted to axial.
-# Five units per side, spaced vertically near opposite edges of the board.
-const BLUE_OFFSET_STARTS: Array[Vector2i] = [
-	Vector2i(1, 3),
-	Vector2i(1, 6),
-	Vector2i(1, 9),
-	Vector2i(1, 12),
-	Vector2i(1, 15),
-]
-const RED_OFFSET_STARTS: Array[Vector2i] = [
-	Vector2i(8, 3),
-	Vector2i(8, 6),
-	Vector2i(8, 9),
-	Vector2i(8, 12),
-	Vector2i(8, 15),
+const STARTING_ARMY_POINTS: int = 10
+const UNIT_DRAFT_OPTIONS := [
+	{
+		"id": "warrior_l1",
+		"display_name": "Level 1 Warrior",
+		"cost": 1,
+		"unit_type": "Warrior"
+	}
 ]
 
 var grid: Grid
@@ -59,9 +52,23 @@ var unit_scene: PackedScene
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 var team_spawn_counts: Dictionary = {}
+var is_draft_phase: bool = true
+var draft_team_order: Array = [Unit.Team.BLUE, Unit.Team.RED]
+var current_draft_index: int = 0
+var team_points_remaining: Dictionary = {}
+var team_draft_counts: Dictionary = {}
+
+var draft_panel: PanelContainer
+var draft_title_label: Label
+var draft_points_label: Label
+var draft_help_label: Label
+var draft_finish_button: Button
+var draft_option_count_labels: Dictionary = {}
+var draft_option_minus_buttons: Dictionary = {}
+var draft_option_plus_buttons: Dictionary = {}
 
 func _ready() -> void:
-	print("How to Play: Click a unit (your color) to select. Click a highlighted tile to move. Click an adjacent enemy to attack. Click your unit again to skip attack. Press End Turn when done.")
+	print("Team setup: Spend 10 Army points per team, then start battle.")
 	rng.randomize()
 	team_spawn_counts[Unit.Team.BLUE] = 0
 	team_spawn_counts[Unit.Team.RED] = 0
@@ -93,8 +100,9 @@ func _ready() -> void:
 
 	grid = Grid.new(COLS, ROWS, HEX_RADIUS)
 	_build_grid()
-	_spawn_units()
-	_start_team_turn()
+	_init_team_draft_state()
+	_setup_team_draft_ui()
+	_update_team_draft_ui()
 	_update_hud()
 
 func _ensure_unit_info_panel_controls() -> void:
@@ -191,13 +199,241 @@ func _build_grid() -> void:
 			tile.set_coord(coord)
 			grid.tiles[coord] = tile
 
-func _spawn_units() -> void:
-	for offset in BLUE_OFFSET_STARTS:
-		_spawn_unit(Hex.offset_to_axial(offset), Unit.Team.BLUE)
-	for offset in RED_OFFSET_STARTS:
-		_spawn_unit(Hex.offset_to_axial(offset), Unit.Team.RED)
+func _init_team_draft_state() -> void:
+	is_draft_phase = true
+	current_draft_index = 0
+	team_points_remaining.clear()
+	team_draft_counts.clear()
+	for team in draft_team_order:
+		team_points_remaining[team] = STARTING_ARMY_POINTS
+		var counts := {}
+		for option in UNIT_DRAFT_OPTIONS:
+			counts[option["id"]] = 0
+		team_draft_counts[team] = counts
 
-func _spawn_unit(coord: Vector2i, team: Unit.Team) -> void:
+func _setup_team_draft_ui() -> void:
+	if draft_panel:
+		draft_panel.queue_free()
+	draft_option_count_labels.clear()
+	draft_option_minus_buttons.clear()
+	draft_option_plus_buttons.clear()
+	
+	draft_panel = PanelContainer.new()
+	draft_panel.name = "TeamDraftPanel"
+	draft_panel.anchor_left = 0.5
+	draft_panel.anchor_top = 0.5
+	draft_panel.anchor_right = 0.5
+	draft_panel.anchor_bottom = 0.5
+	draft_panel.offset_left = -220
+	draft_panel.offset_top = -170
+	draft_panel.offset_right = 220
+	draft_panel.offset_bottom = 170
+	draft_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	hud.add_child(draft_panel)
+	
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	draft_panel.add_child(margin)
+	
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	margin.add_child(vbox)
+	
+	draft_title_label = Label.new()
+	draft_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	draft_title_label.add_theme_font_size_override("font_size", 28)
+	draft_title_label.text = "Select your team"
+	vbox.add_child(draft_title_label)
+	
+	draft_points_label = Label.new()
+	draft_points_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	draft_points_label.add_theme_font_size_override("font_size", 20)
+	vbox.add_child(draft_points_label)
+	
+	var options_box := VBoxContainer.new()
+	options_box.add_theme_constant_override("separation", 8)
+	vbox.add_child(options_box)
+	
+	for option in UNIT_DRAFT_OPTIONS:
+		var option_id := String(option["id"])
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		options_box.add_child(row)
+		
+		var option_name := Label.new()
+		option_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		option_name.text = "%s (Cost: %d)" % [option["display_name"], int(option["cost"])]
+		row.add_child(option_name)
+		
+		var minus_button := Button.new()
+		minus_button.text = "◀"
+		minus_button.tooltip_text = "Decrease unit count"
+		minus_button.custom_minimum_size = Vector2(30, 28)
+		minus_button.pressed.connect(_on_draft_adjust_pressed.bind(option_id, -1))
+		row.add_child(minus_button)
+		draft_option_minus_buttons[option_id] = minus_button
+		
+		var count_label := Label.new()
+		count_label.text = "0"
+		count_label.custom_minimum_size = Vector2(40, 24)
+		count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row.add_child(count_label)
+		draft_option_count_labels[option_id] = count_label
+		
+		var plus_button := Button.new()
+		plus_button.text = "▶"
+		plus_button.tooltip_text = "Increase unit count"
+		plus_button.custom_minimum_size = Vector2(30, 28)
+		plus_button.pressed.connect(_on_draft_adjust_pressed.bind(option_id, 1))
+		row.add_child(plus_button)
+		draft_option_plus_buttons[option_id] = plus_button
+	
+	draft_help_label = Label.new()
+	draft_help_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	draft_help_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(draft_help_label)
+	
+	draft_finish_button = Button.new()
+	draft_finish_button.text = "Finish"
+	draft_finish_button.pressed.connect(_on_draft_finish_pressed)
+	vbox.add_child(draft_finish_button)
+
+func _get_current_draft_team() -> Unit.Team:
+	return draft_team_order[current_draft_index]
+
+func _team_name(team: Unit.Team) -> String:
+	return "BLUE" if team == Unit.Team.BLUE else "RED"
+
+func _get_draft_option_by_id(option_id: String) -> Dictionary:
+	for option in UNIT_DRAFT_OPTIONS:
+		if String(option["id"]) == option_id:
+			return option
+	return {}
+
+func _update_team_draft_ui() -> void:
+	if not draft_panel:
+		return
+	
+	var team := _get_current_draft_team()
+	var remaining: int = int(team_points_remaining.get(team, 0))
+	var team_counts: Dictionary = team_draft_counts.get(team, {})
+	var team_number: int = current_draft_index + 1
+	
+	draft_title_label.text = "Select your team (Team %d - %s)" % [team_number, _team_name(team)]
+	draft_points_label.text = "Army Points: %d / %d" % [remaining, STARTING_ARMY_POINTS]
+	draft_help_label.text = "Use all Army points, then press Finish."
+	draft_finish_button.text = "Finish Team %d" % team_number
+	draft_finish_button.disabled = (remaining != 0)
+	
+	for option in UNIT_DRAFT_OPTIONS:
+		var option_id := String(option["id"])
+		var count_value: int = int(team_counts.get(option_id, 0))
+		var cost: int = int(option["cost"])
+		if draft_option_count_labels.has(option_id):
+			var count_label := draft_option_count_labels[option_id] as Label
+			count_label.text = str(count_value)
+		if draft_option_minus_buttons.has(option_id):
+			var minus_button := draft_option_minus_buttons[option_id] as Button
+			minus_button.disabled = (count_value <= 0)
+		if draft_option_plus_buttons.has(option_id):
+			var plus_button := draft_option_plus_buttons[option_id] as Button
+			plus_button.disabled = (remaining < cost)
+	
+	unit_info_panel.visible = false
+
+func _on_draft_adjust_pressed(option_id: String, delta: int) -> void:
+	if not is_draft_phase:
+		return
+	
+	var option := _get_draft_option_by_id(option_id)
+	if option.is_empty():
+		return
+	
+	var team := _get_current_draft_team()
+	var team_counts: Dictionary = team_draft_counts.get(team, {})
+	var current_value: int = int(team_counts.get(option_id, 0))
+	var remaining: int = int(team_points_remaining.get(team, 0))
+	var cost: int = int(option["cost"])
+	
+	if delta > 0:
+		if remaining < cost:
+			return
+		current_value += 1
+		remaining -= cost
+	elif delta < 0:
+		if current_value <= 0:
+			return
+		current_value -= 1
+		remaining += cost
+	
+	team_counts[option_id] = current_value
+	team_draft_counts[team] = team_counts
+	team_points_remaining[team] = remaining
+	_update_team_draft_ui()
+	_update_hud()
+
+func _on_draft_finish_pressed() -> void:
+	if not is_draft_phase:
+		return
+	
+	var team := _get_current_draft_team()
+	if int(team_points_remaining.get(team, 0)) != 0:
+		return
+	
+	current_draft_index += 1
+	if current_draft_index < draft_team_order.size():
+		_update_team_draft_ui()
+		_update_hud()
+		return
+	
+	_begin_battle_after_draft()
+
+func _get_spawn_offsets_for_team(team: Unit.Team, needed_count: int) -> Array[Vector2i]:
+	var spawn_offsets: Array[Vector2i] = []
+	var spawn_col: int = 1 if team == Unit.Team.BLUE else 8
+	for row in range(1, ROWS, 2):
+		spawn_offsets.append(Vector2i(spawn_col, row))
+	if needed_count > spawn_offsets.size():
+		push_warning("Not enough spawn tiles for %s team draft count (%d)." % [_team_name(team), needed_count])
+	return spawn_offsets
+
+func _spawn_units_from_draft() -> void:
+	team_spawn_counts[Unit.Team.BLUE] = 0
+	team_spawn_counts[Unit.Team.RED] = 0
+	
+	for team in draft_team_order:
+		var team_counts: Dictionary = team_draft_counts.get(team, {})
+		var total_units: int = 0
+		for option in UNIT_DRAFT_OPTIONS:
+			total_units += int(team_counts.get(String(option["id"]), 0))
+		
+		var spawn_offsets := _get_spawn_offsets_for_team(team, total_units)
+		var spawn_index: int = 0
+		for option in UNIT_DRAFT_OPTIONS:
+			var option_id := String(option["id"])
+			var count_value: int = int(team_counts.get(option_id, 0))
+			var unit_type := String(option.get("unit_type", "Warrior"))
+			for _i in range(count_value):
+				if spawn_index >= spawn_offsets.size():
+					break
+				var offset: Vector2i = spawn_offsets[spawn_index]
+				spawn_index += 1
+				_spawn_unit(Hex.offset_to_axial(offset), team, unit_type)
+
+func _begin_battle_after_draft() -> void:
+	is_draft_phase = false
+	if draft_panel:
+		draft_panel.visible = false
+	_spawn_units_from_draft()
+	_start_team_turn()
+	_update_hud()
+	log_label.text = "Team setup complete. Battle start!"
+	print("How to Play: Click a unit (your color) to select. Click a highlighted tile to move. Click an adjacent enemy to attack. Click your unit again to skip attack. Press End Turn when done.")
+
+func _spawn_unit(coord: Vector2i, team: Unit.Team, unit_type: String = "Warrior") -> void:
 	var u: Unit = unit_scene.instantiate()
 	u.team = team
 	u.hex_radius = HEX_RADIUS
@@ -206,7 +442,7 @@ func _spawn_unit(coord: Vector2i, team: Unit.Team) -> void:
 	var current_count: int = int(team_spawn_counts.get(team, 0))
 	current_count += 1
 	team_spawn_counts[team] = current_count
-	u.unit_type = "Warrior"
+	u.unit_type = unit_type
 	u.unit_index = current_count
 	u.refresh_labels()
 	grid.set_occupied(coord, u)
@@ -235,6 +471,14 @@ func _clear_highlights() -> void:
 			tile.set_highlight(false)
 
 func _update_hud() -> void:
+	if is_draft_phase:
+		var draft_team := _get_current_draft_team()
+		active_team_label.text = "Select your team"
+		info_label.text = "Team %s: choose units with +/- and spend all Army points." % _team_name(draft_team)
+		log_label.text = "Army points left: %d" % int(team_points_remaining.get(draft_team, 0))
+		end_turn_button.disabled = true
+		return
+	
 	var team_name := "BLUE" if active_team == Unit.Team.BLUE else "RED"
 	active_team_label.text = "Active: %s" % team_name
 	var remaining := _remaining_to_act()
@@ -280,6 +524,8 @@ func _check_win_condition() -> void:
 		_update_hud()
 
 func _on_end_turn_pressed() -> void:
+	if is_draft_phase:
+		return
 	if winner >= 0:
 		return
 	_clear_highlights()
@@ -293,6 +539,8 @@ func _on_end_turn_pressed() -> void:
 	_update_hud()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_draft_phase:
+		return
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			_handle_click(get_global_mouse_position(), false)
