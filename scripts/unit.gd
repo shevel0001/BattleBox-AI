@@ -236,7 +236,9 @@ func get_portrait_texture() -> Texture2D:
 	# Prioritize the filenames you already have in assets/portraits.
 	if type_name == "warrior":
 		candidates.append("res://assets/portraits/warrior_1a_%s.png" % team_name)
+		candidates.append("res://assets/portraits/warrior_1a_%s.jpg" % team_name)
 		candidates.append("res://assets/portraits/Warrior 1a %s.png" % team_name)
+		candidates.append("res://assets/portraits/Warrior 1a %s.jpg" % team_name)
 		if unit_index == 2:
 			candidates.append("res://assets/portraits/Warrior 1b %s.png" % team_name)
 			candidates.append("res://assets/portraits/Warrior 1b %s.jpg" % team_name)
@@ -252,12 +254,14 @@ func get_portrait_texture() -> Texture2D:
 	candidates.append(DEFAULT_PORTRAIT_PATH)
 	
 	for path in candidates:
-		if ResourceLoader.exists(path):
+		if FileAccess.file_exists(path):
 			var tex = load(path)
 			if tex is Texture2D:
 				return tex
 	
-	return null
+	var fallback := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	fallback.fill(Color(0.75, 0.15, 0.75, 1.0))
+	return ImageTexture.create_from_image(fallback)
 
 func get_description_text() -> String:
 	var type_name := unit_type.strip_edges().to_lower()

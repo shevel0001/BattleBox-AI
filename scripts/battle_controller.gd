@@ -117,6 +117,7 @@ func _ensure_unit_info_panel_controls() -> void:
 		unit_info_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		vbox.add_child(unit_info_portrait)
 		vbox.move_child(unit_info_portrait, 1)
+	unit_info_portrait.modulate = Color(1, 1, 1, 1)
 	
 	var description_node := vbox.get_node_or_null("DescriptionLabel")
 	if description_node is Label:
