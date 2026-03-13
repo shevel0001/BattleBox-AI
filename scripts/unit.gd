@@ -243,7 +243,7 @@ func get_portrait_texture() -> Texture2D:
 			candidates.append("res://assets/portraits/Warrior 1b %s.png" % team_name)
 			candidates.append("res://assets/portraits/Warrior 1b %s.jpg" % team_name)
 		if unit_index >= 3:
-			var tier_index := min(unit_index, 3)
+			var tier_index: int = mini(unit_index, 3)
 			candidates.append("res://assets/portraits/Warrior%d %s.png" % [tier_index, team_name])
 			candidates.append("res://assets/portraits/Warrior%d %s.jpg" % [tier_index, team_name])
 	elif type_name == "archer":
