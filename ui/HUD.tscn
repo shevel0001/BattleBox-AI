@@ -1,0 +1,100 @@
+[gd_scene load_steps=1 format=3 uid="uid://hud_001"]
+
+[node name="HUD" type="Control" anchors_preset=15]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ActiveTeamLabel" type="Label" parent="."]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 320.0
+offset_bottom = 50.0
+theme_override_font_sizes/font_size = 24
+text = "Active: BLUE"
+
+[node name="InfoLabel" type="Label" parent="."]
+offset_left = 20.0
+offset_top = 55.0
+offset_right = 420.0
+offset_bottom = 85.0
+theme_override_font_sizes/font_size = 16
+text = "Units that can act: 3. Click a unit to select."
+
+[node name="LogLabel" type="Label" parent="."]
+offset_left = 20.0
+offset_top = 90.0
+offset_right = 420.0
+offset_bottom = 120.0
+theme_override_font_sizes/font_size = 14
+text = "Last roll: —"
+
+[node name="EndTurnButton" type="Button" parent="."]
+offset_left = 20.0
+offset_top = 125.0
+offset_right = 180.0
+offset_bottom = 165.0
+text = "End Turn"
+
+[node name="UnitInfoPanel" type="PanelContainer" parent="."]
+anchor_left = 1.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 0.0
+offset_left = -260.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = 220.0
+mouse_filter = 2
+
+[node name="VBox" type="VBoxContainer" parent="UnitInfoPanel"]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 232.0
+offset_bottom = 192.0
+theme_override_constants/separation = 4
+mouse_filter = 2
+
+[node name="TitleLabel" type="Label" parent="UnitInfoPanel/VBox"]
+theme_override_font_sizes/font_size = 18
+text = "Unit Info"
+
+[node name="Portrait" type="ColorRect" parent="UnitInfoPanel/VBox"]
+custom_minimum_size = Vector2(200, 80)
+color = Color(0.15, 0.18, 0.22, 1)
+
+[node name="NameLabel" type="Label" parent="UnitInfoPanel/VBox"]
+theme_override_font_sizes/font_size = 16
+text = "Name: -"
+
+[node name="RarityLabel" type="Label" parent="UnitInfoPanel/VBox"]
+theme_override_font_sizes/font_size = 14
+text = "Rarity: -"
+
+[node name="HpLabel" type="Label" parent="UnitInfoPanel/VBox"]
+theme_override_font_sizes/font_size = 14
+text = "HP: -"
+
+[node name="DamageLabel" type="Label" parent="UnitInfoPanel/VBox"]
+theme_override_font_sizes/font_size = 14
+text = "Damage: -"
+
+[node name="DefenseLabel" type="Label" parent="UnitInfoPanel/VBox"]
+theme_override_font_sizes/font_size = 14
+text = "Defense: -"
+
+[node name="MoveLabel" type="Label" parent="UnitInfoPanel/VBox"]
+theme_override_font_sizes/font_size = 14
+text = "Move: -"
+
+[node name="LevelXpLabel" type="Label" parent="UnitInfoPanel/VBox"]
+theme_override_font_sizes/font_size = 14
+text = "Level / XP: -"
+
+[node name="SelectHintLabel" type="Label" parent="UnitInfoPanel/VBox"]
+theme_override_font_sizes/font_size = 12
+text = "Right-click unit on map to select for action"
+autowrap_mode = 2

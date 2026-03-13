@@ -1,463 +1,369 @@
-## Main battle controller - handles turn system, input, and game flow
-
 extends Node2D
-class_name BattleController
+## Main battle: grid, units, turn order, input, attack, win condition.
 
-const EffectsScript = preload("res://scripts/effects.gd")
-const DEFAULT_UNIT_PORTRAIT: Texture2D = preload("res://assets/portraits/default_unit.svg")
+const COLS: int = 10
+const ROWS: int = 20
+const HEX_RADIUS: float = 42.0
 
-enum TurnSide {
-	PLAYER,
-	ENEMY
-}
+# Starting positions using offset coords (col,row), then converted to axial.
+# Five units per side, spaced vertically near opposite edges of the board.
+const BLUE_OFFSET_STARTS: Array[Vector2i] = [
+	Vector2i(1, 3),
+	Vector2i(1, 6),
+	Vector2i(1, 9),
+	Vector2i(1, 12),
+	Vector2i(1, 15),
+]
+const RED_OFFSET_STARTS: Array[Vector2i] = [
+	Vector2i(8, 3),
+	Vector2i(8, 6),
+	Vector2i(8, 9),
+	Vector2i(8, 12),
+	Vector2i(8, 15),
+]
 
-var current_turn: TurnSide = TurnSide.PLAYER
-var selected_unit: Unit = null
-var reachable_tiles: Array = []
-var units: Array[Unit] = []
-var player_units: Array[Unit] = []
-var enemy_units: Array[Unit] = []
+var grid: Grid
+var active_team: Unit.Team = Unit.Team.BLUE
+var selected_unit: Unit = null  # unit chosen to move/attack (uses one of 3 actions)
+var inspected_unit: Unit = null  # unit being viewed in panel (click to look, does not use action)
+var move_options: Dictionary = {}  # Vector2i -> true (coords we can move to)
+var unit_has_moved_this_selection: bool = false
+var winner: Unit.Team = -1  # -1 = none
 
-@onready var grid_root: Node2D = $GridRoot
-@onready var unit_root: Node2D = $UnitRoot
-@onready var overlay_root: Node2D = $OverlayRoot
-@onready var ui_layer: CanvasLayer = $UI
-@onready var grid: HexGrid = grid_root.get_node("HexGrid") if grid_root.has_node("HexGrid") else null
+const MAX_ACTIONS_PER_TURN: int = 3
+var actions_used_this_turn: int = 0
 
-var unit_scene: PackedScene
-var hex_tile_scene: PackedScene
-var unit_info_panel: PanelContainer
-var unit_info_stats_label: Label
-var unit_info_portrait: TextureRect
+var grid_root: Node2D
+var unit_root: Node2D
+var hud: Control
+var active_team_label: Label
+var info_label: Label
+var log_label: Label
+var end_turn_button: Button
+var unit_info_panel: Control
 var unit_info_name_label: Label
+var unit_info_rarity_label: Label
+var unit_info_hp_label: Label
+var unit_info_damage_label: Label
+var unit_info_defense_label: Label
+var unit_info_move_label: Label
+var unit_info_level_xp_label: Label
+var unit_info_select_hint: Label
+var unit_info_title_label: Label
 
-func _ready():
-	# Load scenes
-	unit_scene = load("res://scenes/Unit.tscn")
-	hex_tile_scene = load("res://scenes/HexTile.tscn")
-	
-	if not unit_scene or not hex_tile_scene:
-		push_error("Failed to load required scenes")
-		return
-	
-	# Create grid
-	if not grid:
-		grid = HexGrid.new()
-		grid.name = "HexGrid"
-		grid_root.add_child(grid)
-	
-	# Spawn units
-	spawn_units()
-	
-	# Update UI
-	update_turn_label()
-	setup_unit_info_panel()
-	
-	print("=== HEX TACTICS PROTOTYPE ===")
-	print("How to Play:")
-	print("- Click a blue unit to select it")
-	print("- Green tiles show movement range")
-	print("- Click a green tile to move")
-	print("- Click an enemy in range to attack")
-	print("- Poison deals 2 damage per turn for 3 turns")
+var hex_tile_scene: PackedScene
+var unit_scene: PackedScene
 
-func spawn_units():
-	# Spawn 2 player units
-	spawn_unit(Unit.Team.PLAYER, Vector2i(-2, -1), "Player1", "warrior", 1, "a")
-	spawn_unit(Unit.Team.PLAYER, Vector2i(-1, -2), "Player2", "warrior", 1, "a")
-	
-	# Spawn 2 enemy units
-	spawn_unit(Unit.Team.ENEMY, Vector2i(2, 1), "Enemy1", "warrior", 1, "a")
-	spawn_unit(Unit.Team.ENEMY, Vector2i(1, 2), "Enemy2", "warrior", 1, "a")
-	
-	# Apply poison to one enemy for demonstration
-	if enemy_units.size() > 0:
-		var poison = EffectsScript.PoisonEffect.new(3)
-		enemy_units[0].effects.add_effect(poison)
+var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
-func spawn_unit(
-	team: Unit.Team,
-	coord: Vector2i,
-	unit_name: String,
-	unit_class: String = "warrior",
-	unit_level: int = 1,
-	portrait_variant: String = "a"
-) -> Unit:
-	var unit = unit_scene.instantiate()
-	unit.team = team
-	unit.name = unit_name
-	unit.unit_class = unit_class
-	unit.unit_level = unit_level
-	unit.portrait_variant = portrait_variant
-	unit.portrait = get_portrait_for_unit(unit)
-	unit.set_coord(coord)
-	unit_root.add_child(unit)
-	units.append(unit)
-	
-	if team == Unit.Team.PLAYER:
-		player_units.append(unit)
-	else:
-		enemy_units.append(unit)
-	
-	return unit
+var team_spawn_counts: Dictionary = {}
 
-func get_portrait_for_unit(unit: Unit) -> Texture2D:
-	# If portrait is explicitly set on the unit resource/scene, prefer that.
-	if unit.portrait:
-		return unit.portrait
-	
-	var team_color = "blue"
-	if unit.team == Unit.Team.ENEMY:
-		team_color = "red"
-	
-	var unit_class_name = unit.unit_class.strip_edges().to_lower()
-	var unit_level_value = unit.unit_level
-	var variant_name = unit.portrait_variant.strip_edges().to_lower()
-	
-	var parsed = parse_unit_name_for_portrait(unit.name)
-	if parsed["unit_class"] != "":
-		unit_class_name = parsed["unit_class"]
-	if parsed["unit_level"] > 0:
-		unit_level_value = parsed["unit_level"]
-	if parsed["variant"] != "":
-		variant_name = parsed["variant"]
-	
-	if unit_class_name == "":
-		unit_class_name = "unit"
-	if variant_name == "":
-		variant_name = "a"
-	
-	var portrait_paths = [
-		"res://assets/portraits/%s_%d%s_%s.png" % [
-			unit_class_name,
-			unit_level_value,
-			variant_name,
-			team_color
-		],
-		"res://assets/portraits/%s %d%s %s.png" % [
-			unit_class_name.capitalize(),
-			unit_level_value,
-			variant_name,
-			team_color
-		],
-		"res://assets/portraits/%s %d %s.png" % [
-			unit_class_name.capitalize(),
-			unit_level_value,
-			team_color
-		]
-	]
-	
-	for portrait_path in portrait_paths:
-		if ResourceLoader.exists(portrait_path):
-			var loaded_resource = load(portrait_path)
-			if loaded_resource is Texture2D:
-				return loaded_resource
-	
-	return DEFAULT_UNIT_PORTRAIT
-
-func parse_unit_name_for_portrait(unit_name: String) -> Dictionary:
-	var result = {
-		"unit_class": "",
-		"unit_level": -1,
-		"variant": ""
-	}
-	
-	var normalized = unit_name.strip_edges().to_lower()
-	if normalized == "":
-		return result
-	
-	var level_regex = RegEx.new()
-	level_regex.compile("level\\s*(\\d+)")
-	var level_match = level_regex.search(normalized)
-	if level_match:
-		result["unit_level"] = int(level_match.get_string(1))
-	
-	var class_regex = RegEx.new()
-	class_regex.compile("(warrior|archer|mage|tank)")
-	var class_match = class_regex.search(normalized)
-	if class_match:
-		result["unit_class"] = class_match.get_string(1)
-	
-	var variant_regex = RegEx.new()
-	variant_regex.compile("\\d([a-z])")
-	var variant_match = variant_regex.search(normalized)
-	if variant_match:
-		result["variant"] = variant_match.get_string(1)
-	
-	return result
-
-func _unhandled_input(event: InputEvent):
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if current_turn != TurnSide.PLAYER:
-			return
-		
-		handle_click(event.position)
-
-func handle_click(mouse_pos: Vector2):
-	# Convert to local coordinates
-	var local_pos = to_local(mouse_pos)
-	
-	# First check if clicking on a unit
-	var clicked_unit = get_unit_at_position(local_pos)
-	
-	if clicked_unit:
-		show_unit_info(clicked_unit)
-		
-		if clicked_unit.team == Unit.Team.PLAYER and current_turn == TurnSide.PLAYER:
-			select_unit(clicked_unit)
-		elif selected_unit and selected_unit.can_attack(clicked_unit.coord):
-			# Attack enemy
-			selected_unit.attack(clicked_unit)
-			# Process effects at end of action
-			selected_unit.effects.on_turn_end(selected_unit)
-			clear_selection()
-			check_game_over()
-			end_player_turn()
-		return
-	
-	# Check if clicking on a reachable tile
-	var clicked_coord = Hex.pixel_to_axial(local_pos)
-	if clicked_coord in reachable_tiles:
-		if selected_unit:
-			move_unit(selected_unit, clicked_coord)
-			clear_selection()
-			end_player_turn()
-
-func get_unit_at_position(pos: Vector2) -> Unit:
-	var closest_unit: Unit = null
-	var closest_dist: float = 999999.0
-	
-	for unit in units:
-		if not unit.is_alive():
-			continue
-		
-		var dist = pos.distance_to(unit.position)
-		if dist < 30.0 and dist < closest_dist:  # Within unit radius
-			closest_dist = dist
-			closest_unit = unit
-	
-	return closest_unit
-
-func select_unit(unit: Unit) -> void:
-	# If another unit was selected, end its turn first
-	if selected_unit and selected_unit != unit:
-		selected_unit.effects.on_turn_end(selected_unit)
-	
-	# Process effects at start of unit's turn
-	unit.effects.on_turn_start(unit)
-	
-	selected_unit = unit
-	show_unit_info(unit)
-	show_movement_range(unit)
-
-func show_movement_range(unit: Unit) -> void:
-	clear_highlights()
-	reachable_tiles = grid.movement_range(unit.coord, unit.move_points)
-	
-	# Remove starting tile from reachable
-	reachable_tiles.erase(unit.coord)
-	
-	# Filter out tiles occupied by other units
-	var filtered_tiles: Array = []
-	for coord in reachable_tiles:
-		var occupied = false
-		for other_unit in units:
-			if other_unit != unit and other_unit.is_alive() and other_unit.coord == coord:
-				occupied = true
-				break
-		if not occupied:
-			filtered_tiles.append(coord)
-	
-	reachable_tiles = filtered_tiles
-	
-	# Highlight reachable tiles
-	for coord in reachable_tiles:
-		var tile = grid.get_tile(coord)
-		if tile:
-			tile.set_highlighted(true)
-
-func clear_highlights() -> void:
-	reachable_tiles.clear()
-	for tile in grid.tiles.values():
-		tile.set_highlighted(false)
-
-func clear_selection() -> void:
-	selected_unit = null
-	clear_highlights()
-	hide_unit_info()
-
-func move_unit(unit: Unit, target_coord: Vector2i) -> void:
-	# Check if tile is occupied
-	for other_unit in units:
-		if other_unit != unit and other_unit.is_alive() and other_unit.coord == target_coord:
-			return  # Can't move to occupied tile
-	
-	unit.set_coord(target_coord)
-	print("%s moved to (%d, %d)" % [unit.name, target_coord.x, target_coord.y])
-	
-	# Process effects at end of action
-	unit.effects.on_turn_end(unit)
-
-func end_player_turn() -> void:
-	current_turn = TurnSide.ENEMY
-	update_turn_label()
-	clear_selection()
-	
-	# Process enemy turn after a short delay
-	await get_tree().create_timer(0.5).timeout
-	process_enemy_turn()
-
-func process_enemy_turn() -> void:
-	for enemy in enemy_units:
-		if not enemy.is_alive():
-			continue
-		
-		# Process effects at start of turn
-		enemy.effects.on_turn_start(enemy)
-		
-		# Simple AI: attack adjacent player unit if possible
-		var attacked = false
-		for player in player_units:
-			if not player.is_alive():
-				continue
-			
-			if enemy.can_attack(player.coord):
-				enemy.attack(player)
-				attacked = true
-				break
-		
-		if not attacked:
-			# Could move here, but for simplicity just end
-			pass
-		
-		# Process effects at end of turn
-		enemy.effects.on_turn_end(enemy)
-		
-		await get_tree().create_timer(0.3).timeout
-	
-	check_game_over()
-	
-	# Switch back to player turn
-	current_turn = TurnSide.PLAYER
-	update_turn_label()
-
-func check_game_over() -> void:
-	# Remove dead units
-	var alive_players = []
-	var alive_enemies = []
-	
-	for unit in player_units:
-		if unit.is_alive():
-			alive_players.append(unit)
-		else:
-			unit.queue_free()
-			units.erase(unit)
-	
-	for unit in enemy_units:
-		if unit.is_alive():
-			alive_enemies.append(unit)
-		else:
-			unit.queue_free()
-			units.erase(unit)
-	
-	player_units = alive_players
-	enemy_units = alive_enemies
-	
-	# Check win/lose conditions
-	if player_units.size() == 0:
-		print("=== GAME OVER - DEFEAT ===")
-		show_message("DEFEAT - All units lost!")
-	elif enemy_units.size() == 0:
-		print("=== VICTORY ===")
-		show_message("VICTORY - All enemies defeated!")
-
-func show_message(text: String) -> void:
-	# Simple message display
-	var label = Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", 32)
-	label.position = Vector2(400, 300)
-	ui_layer.add_child(label)
-
-func update_turn_label() -> void:
-	var label = ui_layer.get_node_or_null("TurnLabel")
-	if not label:
-		label = Label.new()
-		label.name = "TurnLabel"
-		label.position = Vector2(10, 10)
-		label.add_theme_font_size_override("font_size", 24)
-		ui_layer.add_child(label)
-	
-	if current_turn == TurnSide.PLAYER:
-		label.text = "Turn: PLAYER"
-		label.modulate = Color.BLUE
-	else:
-		label.text = "Turn: ENEMY"
-		label.modulate = Color.RED
-
-func setup_unit_info_panel() -> void:
-	unit_info_panel = PanelContainer.new()
-	unit_info_panel.name = "UnitInfoPanel"
-	unit_info_panel.position = Vector2(10, 50)
-	unit_info_panel.custom_minimum_size = Vector2(230, 360)
-	
-	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 10)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_right", 10)
-	margin.add_theme_constant_override("margin_bottom", 10)
-	unit_info_panel.add_child(margin)
-	
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 8)
-	margin.add_child(vbox)
-	
-	var title = Label.new()
-	title.text = "Unit Info"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 22)
-	vbox.add_child(title)
-	
-	unit_info_stats_label = Label.new()
-	unit_info_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vbox.add_child(unit_info_stats_label)
-	
-	unit_info_portrait = TextureRect.new()
-	unit_info_portrait.custom_minimum_size = Vector2(180, 190)
-	unit_info_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	unit_info_portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_child(unit_info_portrait)
-	
-	unit_info_name_label = Label.new()
-	unit_info_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	unit_info_name_label.add_theme_font_size_override("font_size", 18)
-	vbox.add_child(unit_info_name_label)
-	
-	ui_layer.add_child(unit_info_panel)
+func _ready() -> void:
+	print("How to Play: Click a unit (your color) to select. Click a highlighted tile to move. Click an adjacent enemy to attack. Click your unit again to skip attack. Press End Turn when done.")
+	rng.randomize()
+	team_spawn_counts[Unit.Team.BLUE] = 0
+	team_spawn_counts[Unit.Team.RED] = 0
+	grid_root = get_node("GridRoot")
+	unit_root = get_node("UnitRoot")
+	var hud_layer: CanvasLayer = get_node("HUDLayer")
+	hud = hud_layer.get_child(0)
+	active_team_label = hud.get_node("ActiveTeamLabel")
+	info_label = hud.get_node("InfoLabel")
+	log_label = hud.get_node("LogLabel")
+	end_turn_button = hud.get_node("EndTurnButton")
+	end_turn_button.pressed.connect(_on_end_turn_pressed)
+	unit_info_panel = hud.get_node("UnitInfoPanel")
+	unit_info_name_label = hud.get_node("UnitInfoPanel/VBox/NameLabel")
+	unit_info_rarity_label = hud.get_node("UnitInfoPanel/VBox/RarityLabel")
+	unit_info_hp_label = hud.get_node("UnitInfoPanel/VBox/HpLabel")
+	unit_info_damage_label = hud.get_node("UnitInfoPanel/VBox/DamageLabel")
+	unit_info_defense_label = hud.get_node("UnitInfoPanel/VBox/DefenseLabel")
+	unit_info_move_label = hud.get_node("UnitInfoPanel/VBox/MoveLabel")
+	unit_info_level_xp_label = hud.get_node("UnitInfoPanel/VBox/LevelXpLabel")
+	unit_info_select_hint = hud.get_node("UnitInfoPanel/VBox/SelectHintLabel")
+	unit_info_title_label = hud.get_node("UnitInfoPanel/VBox/TitleLabel")
 	unit_info_panel.visible = false
 
-func show_unit_info(unit: Unit) -> void:
-	if not unit_info_panel:
-		return
-	
-	var team_name = "Player"
-	if unit.team == Unit.Team.ENEMY:
-		team_name = "Enemy"
-	
-	unit_info_stats_label.text = "Team: %s\nClass: %s Lv.%d\nHP: %d/%d\nMove: %d\nAttack: %d (Range %d)" % [
-		team_name,
-		unit.unit_class.capitalize(),
-		unit.unit_level,
-		unit.hp,
-		unit.max_hp,
-		unit.move_points,
-		unit.attack_damage,
-		unit.attack_range
-	]
-	unit_info_portrait.texture = unit.portrait
-	unit_info_name_label.text = "Name: %s" % unit.name
-	unit_info_panel.visible = true
+	hex_tile_scene = preload("res://scenes/HexTile.tscn")
+	unit_scene = preload("res://scenes/Unit.tscn")
 
-func hide_unit_info() -> void:
-	if unit_info_panel:
+	grid = Grid.new(COLS, ROWS, HEX_RADIUS)
+	_build_grid()
+	_spawn_units()
+	_start_team_turn()
+	_update_hud()
+
+func _build_grid() -> void:
+	# Build 10 cols x 20 rows in rectangular (offset) layout; store tiles by axial for logic.
+	for row in range(ROWS):
+		for col in range(COLS):
+			var offset := Vector2i(col, row)
+			var coord := Hex.offset_to_axial(offset)
+			var tile: Node2D = hex_tile_scene.instantiate()
+			grid_root.add_child(tile)
+			tile.hex_radius = HEX_RADIUS
+			tile.set_coord(coord)
+			grid.tiles[coord] = tile
+
+func _spawn_units() -> void:
+	for offset in BLUE_OFFSET_STARTS:
+		_spawn_unit(Hex.offset_to_axial(offset), Unit.Team.BLUE)
+	for offset in RED_OFFSET_STARTS:
+		_spawn_unit(Hex.offset_to_axial(offset), Unit.Team.RED)
+
+func _spawn_unit(coord: Vector2i, team: Unit.Team) -> void:
+	var u: Unit = unit_scene.instantiate()
+	u.team = team
+	u.hex_radius = HEX_RADIUS
+	u.set_coord(coord)
+	# Assign per-team Warrior index for label display.
+	var current_count: int = int(team_spawn_counts.get(team, 0))
+	current_count += 1
+	team_spawn_counts[team] = current_count
+	u.unit_type = "Warrior"
+	u.unit_index = current_count
+	u.refresh_labels()
+	grid.set_occupied(coord, u)
+	unit_root.add_child(u)
+	u.tree_exited.connect(_on_unit_died.bind(team))
+
+func _on_unit_died(_team: Unit.Team) -> void:
+	_check_win_condition()
+
+func _start_team_turn() -> void:
+	for coord in grid.occupied:
+		var u: Unit = grid.occupied[coord]
+		if is_instance_valid(u) and u.team == active_team:
+			u.has_acted = false
+	actions_used_this_turn = 0
+	selected_unit = null
+	unit_has_moved_this_selection = false
+	_clear_highlights()
+	_update_selected_unit_panel()
+
+func _clear_highlights() -> void:
+	move_options.clear()
+	for coord in grid.tiles:
+		var tile = grid.tiles[coord]
+		if tile.has_method("set_highlight"):
+			tile.set_highlight(false)
+
+func _update_hud() -> void:
+	var team_name := "BLUE" if active_team == Unit.Team.BLUE else "RED"
+	active_team_label.text = "Active: %s" % team_name
+	var remaining := _remaining_to_act()
+	info_label.text = "Units that can act: %d. " % remaining
+	if winner >= 0:
+		var wname := "BLUE" if winner == Unit.Team.BLUE else "RED"
+		info_label.text = "Winner: %s!" % wname
+	elif selected_unit == null:
+		info_label.text += "Left-click a unit to view stats. Right-click a friendly unit to select it to move/attack."
+	elif not unit_has_moved_this_selection:
+		info_label.text += "Click a highlighted tile to move, or click an adjacent enemy to attack."
+	else:
+		info_label.text += "Click an enemy to attack or click your unit to skip attack."
+	end_turn_button.disabled = (winner >= 0)
+
+func _remaining_to_act() -> int:
+	var n := 0
+	for coord in grid.occupied:
+		var u: Unit = grid.occupied[coord]
+		if is_instance_valid(u) and u.team == active_team and not u.has_acted:
+			n += 1
+	var remaining_actions := MAX_ACTIONS_PER_TURN - actions_used_this_turn
+	if remaining_actions < 0:
+		remaining_actions = 0
+	return min(n, remaining_actions)
+
+func _check_win_condition() -> void:
+	var blue_alive := false
+	var red_alive := false
+	for coord in grid.occupied:
+		var u: Unit = grid.occupied[coord]
+		if not is_instance_valid(u):
+			continue
+		if u.team == Unit.Team.BLUE:
+			blue_alive = true
+		else:
+			red_alive = true
+	if not blue_alive:
+		winner = Unit.Team.RED
+		_update_hud()
+	elif not red_alive:
+		winner = Unit.Team.BLUE
+		_update_hud()
+
+func _on_end_turn_pressed() -> void:
+	if winner >= 0:
+		return
+	_clear_highlights()
+	if selected_unit:
+		selected_unit.set_selected(false)
+		selected_unit = null
+	inspected_unit = null
+	unit_has_moved_this_selection = false
+	active_team = Unit.Team.RED if active_team == Unit.Team.BLUE else Unit.Team.BLUE
+	_start_team_turn()
+	_update_hud()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			_handle_click(get_global_mouse_position(), false)
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			_handle_click(get_global_mouse_position(), true)
+
+func _handle_click(global_pos: Vector2, is_right_click: bool) -> void:
+	if winner >= 0:
+		return
+	if actions_used_this_turn >= MAX_ACTIONS_PER_TURN and selected_unit == null:
+		# No more units can act this turn.
+		return
+	# Convert to axial in grid space (Main is root; GridRoot has no transform)
+	var local := grid_root.get_global_transform().affine_inverse() * global_pos
+	var coord := Hex.pixel_to_axial(local, HEX_RADIUS)
+	if not grid.in_bounds(coord):
+		return
+
+	var u_at: Unit = grid.occupied.get(coord) as Unit
+
+	if selected_unit == null:
+		if is_right_click:
+			# Right-click on friendly unit that can act = select for action (uses one of 3 moves)
+			if u_at and is_instance_valid(u_at) and u_at.team == active_team and not u_at.has_acted:
+				selected_unit = u_at
+				selected_unit.set_selected(true)
+				unit_has_moved_this_selection = false
+				move_options.clear()
+				for c in grid.movement_range(selected_unit.coord, selected_unit.move_points):
+					move_options[c] = true
+				_apply_highlights()
+				_update_selected_unit_panel()
+				_update_hud()
+		else:
+			# Left-click on any unit = inspect only (show stats); do NOT select for action
+			if u_at and is_instance_valid(u_at):
+				inspected_unit = u_at
+				_update_selected_unit_panel()
+				_update_hud()
+		return
+
+	# We have a selected unit
+	var tile = grid.get_tile(coord)
+	if move_options.has(coord):
+		# Move to this tile
+		grid.set_occupied(selected_unit.coord, null)
+		selected_unit.set_coord(coord)
+		grid.set_occupied(coord, selected_unit)
+		unit_has_moved_this_selection = true
+		_clear_highlights()
+		move_options.clear()
+		_update_hud()
+		return
+
+	var target_unit: Unit = grid.occupied.get(coord) as Unit
+	if target_unit and is_instance_valid(target_unit) and target_unit.team != selected_unit.team:
+		if Hex.axial_distance(selected_unit.coord, target_unit.coord) <= selected_unit.attack_range:
+			_resolve_attack(selected_unit, target_unit)
+			_finish_unit_action()
+			return
+
+	# Click on same unit = skip attack (if we moved) or deselect (if we didn't move)
+	if coord == selected_unit.coord:
+		if unit_has_moved_this_selection:
+			_finish_unit_action()
+		else:
+			selected_unit.set_selected(false)
+			selected_unit = null
+			unit_has_moved_this_selection = false
+			_clear_highlights()
+			move_options.clear()
+			_update_selected_unit_panel()
+			_update_hud()
+		return
+
+	# Click on another unit (while one is selected) = just inspect that unit
+	if u_at and is_instance_valid(u_at):
+		inspected_unit = u_at
+		_update_selected_unit_panel()
+		_update_hud()
+
+func _apply_highlights() -> void:
+	# Clear only the visual highlight state; keep move_options so movement works.
+	for coord in grid.tiles:
+		var tile = grid.tiles[coord]
+		if tile.has_method("set_highlight"):
+			tile.set_highlight(false)
+	for c in move_options:
+		var t = grid.get_tile(c)
+		if t and t.has_method("set_highlight"):
+			t.set_highlight(true)
+
+func _resolve_attack(attacker: Unit, target: Unit) -> void:
+	var to_hit := rng.randi_range(1, 6)
+	var hit := to_hit <= 3
+	var damage := attacker.roll_attack_damage(rng) if hit else 0
+	log_label.text = "To-hit: %d -> %s, damage %d/%d" % [to_hit, "HIT" if hit else "MISS", damage, attacker.get_max_damage_for_level()]
+	# XP: +1 for attacking, +1 if hit
+	attacker.gain_xp(1)
+	if hit:
+		attacker.gain_xp(1)
+	var target_level: int = target.level
+	var target_coord: Vector2i = target.coord
+	var was_inspected: bool = (inspected_unit == target)
+	target.apply_damage(damage)
+	if target.is_dead():
+		grid.set_occupied(target_coord, null)
+		if was_inspected:
+			inspected_unit = null
+		# Kill XP by target level: L1=5, L2=10, L3=20, L4+=20
+		var kill_xp: int = 5
+		if target_level == 2:
+			kill_xp = 10
+		elif target_level >= 3:
+			kill_xp = 20
+		attacker.gain_xp(kill_xp)
+
+func _finish_unit_action() -> void:
+	if not selected_unit:
+		return
+	selected_unit.has_acted = true
+	actions_used_this_turn += 1
+	var tile = grid.get_tile(selected_unit.coord)
+	if tile and tile.has_method("set_claim"):
+		tile.set_claim(HexTile.Claim.BLUE if selected_unit.team == Unit.Team.BLUE else HexTile.Claim.RED)
+	selected_unit.set_selected(false)
+	selected_unit = null
+	unit_has_moved_this_selection = false
+	_clear_highlights()
+	move_options.clear()
+	_update_selected_unit_panel()
+	_check_win_condition()
+	_update_hud()
+
+func _update_selected_unit_panel() -> void:
+	if unit_info_panel == null:
+		return
+	# Show panel for selected_unit (when acting) or inspected_unit (when just viewing)
+	if selected_unit and not is_instance_valid(selected_unit):
+		selected_unit = null
+	if inspected_unit and not is_instance_valid(inspected_unit):
+		inspected_unit = null
+	var display_unit: Unit = selected_unit if (selected_unit != null) else inspected_unit
+	if display_unit == null or not is_instance_valid(display_unit):
 		unit_info_panel.visible = false
+		return
+	unit_info_panel.visible = true
+	unit_info_title_label.text = "Selected unit" if selected_unit == display_unit else "Unit info"
+	var u: Unit = display_unit
+	unit_info_name_label.text = "Name: %s" % u.get_display_name()
+	unit_info_rarity_label.text = "Rarity: %s" % u.get_rarity_name()
+	unit_info_hp_label.text = "HP: %d/%d" % [u.hp, u.max_hp]
+	unit_info_damage_label.text = "Damage: %s" % u.get_damage_expression()
+	unit_info_defense_label.text = "Defense: %d" % u.defense
+	unit_info_move_label.text = "Move points: %d" % u.move_points
+	unit_info_level_xp_label.text = "Level %d  XP %d/%d" % [u.level, u.xp, u.get_xp_required_for_next_level()]
+	# Hint to right-click when viewing a friendly unit that can still act
+	var show_hint: bool = (selected_unit == null and inspected_unit == u and is_instance_valid(u)
+		and u.team == active_team and not u.has_acted and actions_used_this_turn < MAX_ACTIONS_PER_TURN)
+	unit_info_select_hint.visible = show_hint

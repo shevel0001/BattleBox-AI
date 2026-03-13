@@ -10,15 +10,20 @@ config_version=5
 
 [application]
 
-config/name="Hex Tactics"
+config/name="Hex Battle"
 run/main_scene="res://scenes/Main.tscn"
-config/features=PackedStringArray("4.5", "Forward Plus")
+config/features=PackedStringArray("4.5")
 
 [display]
 
-window/size/viewport_width=1024
-window/size/viewport_height=768
+window/size/viewport_width=950
+window/size/viewport_height=850
 
 [dotnet]
 
-project/assembly_name="Hex Tactics"
+project/assembly_name="Hex Battle"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.22, 0.24, 0.28, 1)

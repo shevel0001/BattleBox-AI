@@ -1,129 +1,67 @@
-## Hex grid manager - generates tiles and handles pathfinding
+class_name Grid
+extends RefCounted
+## 10x20 axial grid: tiles, occupancy, BFS movement range.
 
-extends Node2D
-class_name HexGrid
+var tiles: Dictionary = {}  # Vector2i -> HexTile (or Node)
+var occupied: Dictionary = {}  # Vector2i -> Unit
+var cols: int = 10
+var rows: int = 20
+var hex_radius: float = 28.0
 
-## Dictionary mapping Vector2i(q, r) -> HexTile node
-var tiles: Dictionary = {}
+func _init(cols_: int = 10, rows_: int = 20, hex_radius_: float = 28.0) -> void:
+	cols = cols_
+	rows = rows_
+	hex_radius = hex_radius_
 
-## Grid dimensions
-@export var grid_width: int = 10
-@export var grid_height: int = 8
+func in_bounds(coord: Vector2i) -> bool:
+	var off := Hex.axial_to_offset(coord)
+	return off.x >= 0 and off.x < cols and off.y >= 0 and off.y < rows
 
-## Reference to HexTile scene
-var hex_tile_scene: PackedScene
+func get_tile(coord: Vector2i):
+	return tiles.get(coord)
 
-func _ready():
-	# Load HexTile scene
-	hex_tile_scene = load("res://scenes/HexTile.tscn")
-	if not hex_tile_scene:
-		push_error("Failed to load HexTile.tscn")
-		return
-	
-	generate_grid()
+func is_occupied(coord: Vector2i) -> bool:
+	return occupied.has(coord)
 
-## Generate the hex grid
-func generate_grid():
-	tiles.clear()
-	
-	# Generate rectangular-ish grid in axial coordinates
-	for q in range(-grid_width/2, grid_width/2 + 1):
-		for r in range(-grid_height/2, grid_height/2 + 1):
-			var coord = Vector2i(q, r)
-			
-			# Skip some tiles to make it more interesting (block a few)
-			if coord == Vector2i(2, 0) or coord == Vector2i(-2, 1):
-				continue
-			
-			var tile = hex_tile_scene.instantiate()
-			tile.set_coord(coord)
-			tile.set_walkable(true)
-			add_child(tile)
-			tiles[coord] = tile
+func set_occupied(coord: Vector2i, unit_or_null) -> void:
+	if unit_or_null == null:
+		occupied.erase(coord)
+	else:
+		occupied[coord] = unit_or_null
 
-## Get tile at coordinate, or null if doesn't exist
-func get_tile(coord: Vector2i) -> Node:
-	return tiles.get(coord, null)
+## Neighbors that are in bounds (walkability not considered here).
+func get_neighbors(coord: Vector2i) -> Array[Vector2i]:
+	var n := Hex.get_neighbors(coord)
+	var out: Array[Vector2i] = []
+	for c in n:
+		if in_bounds(c):
+			out.append(c)
+	return out
 
-## Check if coordinate is walkable
-func is_walkable(coord: Vector2i) -> bool:
-	var tile = get_tile(coord)
-	if not tile:
-		return false
-	return tile.is_walkable()
+## Neighbors that are in bounds and not occupied (walkable).
+func neighbors_walkable(coord: Vector2i) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for c in get_neighbors(coord):
+		if not is_occupied(c):
+			out.append(c)
+	return out
 
-## Get movement range using BFS
-## Returns a Set of Vector2i coordinates within move_points distance
-func movement_range(start: Vector2i, move_points: int) -> Array:
-	var reachable: Array = []
-	var visited: Dictionary = {}
-	var queue: Array = []
-	
-	queue.append({"coord": start, "cost": 0})
-	visited[start] = true
-	
-	while queue.size() > 0:
-		var current = queue.pop_front()
-		var coord: Vector2i = current.coord
-		var cost: int = current.cost
-		
-		if cost <= move_points:
-			reachable.append(coord)
-		
-		if cost >= move_points:
+## BFS: all coords reachable in at most max_steps steps; cannot step on occupied hexes.
+func movement_range(start: Vector2i, max_steps: int) -> Array[Vector2i]:
+	var reached: Dictionary = {}
+	reached[start] = 0
+	var frontier: Array[Vector2i] = [start]
+	while frontier.size() > 0:
+		var current: Vector2i = frontier.pop_front()
+		var steps: int = reached[current]
+		if steps >= max_steps:
 			continue
-		
-		# Check neighbors
-		for neighbor in Hex.get_neighbors(coord):
-			if visited.has(neighbor):
-				continue
-			
-			if not is_walkable(neighbor):
-				continue
-			
-			# Check if there's a unit blocking this tile
-			# (We'll check this in battle_controller)
-			
-			visited[neighbor] = true
-			queue.append({"coord": neighbor, "cost": cost + 1})
-	
-	return reachable
-
-## Pathfind from start to goal using BFS
-## Returns Array of Vector2i coordinates (path) or empty array if no path
-func pathfind(start: Vector2i, goal: Vector2i) -> Array:
-	if start == goal:
-		return [start]
-	
-	var visited: Dictionary = {}
-	var queue: Array = []
-	var came_from: Dictionary = {}
-	
-	queue.append(start)
-	visited[start] = true
-	
-	while queue.size() > 0:
-		var current: Vector2i = queue.pop_front()
-		
-		if current == goal:
-			# Reconstruct path
-			var path: Array = []
-			var node = goal
-			while node != start:
-				path.insert(0, node)
-				node = came_from[node]
-			path.insert(0, start)
-			return path
-		
-		for neighbor in Hex.get_neighbors(current):
-			if visited.has(neighbor):
-				continue
-			
-			if not is_walkable(neighbor):
-				continue
-			
-			visited[neighbor] = true
-			came_from[neighbor] = current
-			queue.append(neighbor)
-	
-	return []  # No path found
+		for next in neighbors_walkable(current):
+			if not reached.has(next):
+				reached[next] = steps + 1
+				frontier.append(next)
+	var result: Array[Vector2i] = []
+	for c in reached:
+		if c != start:
+			result.append(c)
+	return result

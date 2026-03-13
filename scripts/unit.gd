@@ -1,90 +1,228 @@
-## Unit script - handles unit logic, HP, movement, attacks
-
 extends Node2D
 class_name Unit
+## Unit: team, axial coord, hp, move_points, has_acted. Updates position from coord.
 
-enum Team {
-	PLAYER,
-	ENEMY
-}
+enum Team { BLUE, RED }
+enum Rarity { COMMON, UNCOMMON, RARE, EPIC, LEGENDARY }
 
-@export var team: Team = Team.PLAYER
-@export var max_hp: int = 20
-@export var move_points: int = 3
-@export var attack_range: int = 1
-@export var attack_damage: int = 5
-@export var unit_class: String = "warrior"
-@export var unit_level: int = 1
-@export var portrait_variant: String = "a"
-@export var portrait: Texture2D
+const MAX_HP: int = 5
+const MOVE_POINTS: int = 3
+const ATTACK_RANGE: int = 1
+const ATTACK_POWER: int = 4  # max damage on a successful hit
 
-var hp: int
+@onready var body_poly: Polygon2D = $BodyPoly
+@onready var hp_label: Label = $LabelRoot/HpLabel
+@onready var level_label: Label = $LabelRoot/LevelLabel
+@onready var xp_label: Label = $LabelRoot/XpLabel
+
+var team: Team = Team.BLUE
 var coord: Vector2i = Vector2i.ZERO
-var effects: EffectManager
-var hp_label: Label
+var hp: int = 5
+var max_hp: int = 5
+var move_points: int = 3
+var attack_range: int = 1
+var attack_power: int = 4
+var has_acted: bool = false
 
-func _ready():
-	hp = max_hp
-	effects = EffectManager.new()
-	
-	# Find HP label
-	hp_label = get_node_or_null("HpLabel")
-	update_hp_label()
-	
-	# Set visual based on team
-	update_visual()
+var level: int = 1
+var xp: int = 0
 
-## Set unit's axial coordinate and update position
+var hex_radius: float = 28.0
+
+var unit_type: String = "Warrior"
+var unit_index: int = 0
+var defense: int = 0
+var rarity: Rarity = Rarity.COMMON
+
+var base_max_hp: int = 0
+var damage_die_sides: int = 4
+var base_damage_bonus: int = 0
+var level_bonus_hp: int = 0
+var level_bonus_damage: int = 0
+
+func _ready() -> void:
+	level = 1
+	xp = 0
+	move_points = MOVE_POINTS
+	attack_range = ATTACK_RANGE
+	randomize_rarity()
+	set_team_color()
+	refresh_labels()
+
+func set_team_color() -> void:
+	if body_poly:
+		body_poly.color = Color.BLUE if team == Team.BLUE else Color.RED
+
 func set_coord(new_coord: Vector2i) -> void:
 	coord = new_coord
-	position = Hex.axial_to_pixel(coord)
+	position = Hex.axial_to_pixel(coord, hex_radius)
 
-## Apply damage to unit
+func set_selected(selected: bool) -> void:
+	if body_poly:
+		if selected:
+			scale = Vector2(1.15, 1.15)
+		else:
+			set_team_color()
+			scale = Vector2(1.0, 1.0)
+
 func apply_damage(amount: int) -> void:
-	hp = max(0, hp - amount)
+	var actual: int = maxi(amount - defense, 0)
+	hp = clampi(hp - actual, 0, max_hp)
 	update_hp_label()
-	
-	if hp <= 0:
-		on_death()
+	if is_dead():
+		queue_free()
 
-## Update HP label display
+func is_dead() -> bool:
+	return hp <= 0
+
 func update_hp_label() -> void:
 	if hp_label:
-		hp_label.text = "%d/%d" % [hp, max_hp]
+		hp_label.text = str(hp) + "/" + str(max_hp)
 
-## Update visual appearance based on team
-func update_visual() -> void:
-	var sprite = get_node_or_null("Sprite2D")
-	var color_rect = get_node_or_null("ColorRect")
-	
-	var color: Color
-	if team == Team.PLAYER:
-		color = Color.BLUE
+func refresh_labels() -> void:
+	update_hp_label()
+	_update_progress_labels()
+
+func randomize_rarity() -> void:
+	var roll: int = randi_range(1, 100)
+	if roll <= 60:
+		rarity = Rarity.COMMON
+	elif roll <= 80:
+		rarity = Rarity.UNCOMMON
+	elif roll <= 94:
+		rarity = Rarity.RARE
+	elif roll <= 98:
+		rarity = Rarity.EPIC
 	else:
-		color = Color.RED
-	
-	if sprite:
-		sprite.modulate = color
-	elif color_rect:
-		color_rect.color = color
+		rarity = Rarity.LEGENDARY
 
-## Check if unit can attack target at given coordinate
-func can_attack(target_coord: Vector2i) -> bool:
-	return Hex.distance(coord, target_coord) <= attack_range
+	var base_hp: int = 0
+	match rarity:
+		Rarity.COMMON:
+			# HP: 3 + 1d4, Damage: 1d4
+			base_hp = 3 + randi_range(1, 4)
+			damage_die_sides = 4
+			base_damage_bonus = 0
+		Rarity.UNCOMMON:
+			# HP: 4 + 1d4, Damage: 1d4 + 1
+			base_hp = 4 + randi_range(1, 4)
+			damage_die_sides = 4
+			base_damage_bonus = 1
+		Rarity.RARE:
+			# HP: 4 + 1d6, Damage: 1d6
+			base_hp = 4 + randi_range(1, 6)
+			damage_die_sides = 6
+			base_damage_bonus = 0
+		Rarity.EPIC:
+			# HP: 5 + 1d8, Damage: 1d8 + 1
+			base_hp = 5 + randi_range(1, 8)
+			damage_die_sides = 8
+			base_damage_bonus = 1
+		Rarity.LEGENDARY:
+			# HP: 6 + 1d10, Damage: 1d8 + 3
+			base_hp = 6 + randi_range(1, 10)
+			damage_die_sides = 8
+			base_damage_bonus = 3
 
-## Attack target unit
-func attack(target: Unit) -> void:
-	if not can_attack(target.coord):
+	base_max_hp = base_hp
+	level_bonus_hp = 0
+	level_bonus_damage = 0
+	defense = 0
+	_update_stats_for_level()
+	hp = max_hp
+	_apply_rarity_colors()
+
+func _apply_rarity_colors() -> void:
+	var c := Color.WHITE
+	match rarity:
+		Rarity.COMMON:
+			c = Color(1, 1, 1)
+		Rarity.UNCOMMON:
+			c = Color(0.3, 1.0, 0.3)
+		Rarity.RARE:
+			c = Color(0.4, 0.8, 1.0)
+		Rarity.EPIC:
+			c = Color(0.8, 0.6, 1.0)
+		Rarity.LEGENDARY:
+			c = Color(1.0, 0.84, 0.2)
+
+	if level_label:
+		level_label.add_theme_color_override("font_color", c)
+	if hp_label:
+		hp_label.add_theme_color_override("font_color", c)
+	if xp_label:
+		xp_label.add_theme_color_override("font_color", c)
+
+## Rolls damage for a successful hit.
+## Kept as a method so future unit qualifiers/modifiers can change damage rules cleanly.
+func roll_attack_damage(rng: RandomNumberGenerator) -> int:
+	var max_damage: int = get_max_damage_for_level()
+	# Damage = 1d[die_sides] + base_bonus + per-level bonus.
+	var roll: int = randi_range(1, damage_die_sides)
+	return roll + base_damage_bonus + level_bonus_damage
+
+func get_max_damage_for_level() -> int:
+	return damage_die_sides + base_damage_bonus + level_bonus_damage
+
+## XP required to level up from current level (L1->2 = 10, L2->3 = 20, L3->4 = 30, ...).
+func get_xp_required_for_next_level() -> int:
+	return 10 * level
+
+func gain_xp(amount: int) -> void:
+	if amount <= 0:
 		return
-	
-	target.apply_damage(attack_damage)
-	print("%s attacks %s for %d damage" % [name, target.name, attack_damage])
+	xp += amount
+	var required: int = get_xp_required_for_next_level()
+	while xp >= required:
+		xp -= required
+		level += 1
+		# On each level gained beyond 1:
+		# - Add 1d6 to max HP
+		# - Add +2 flat damage
+		var hp_gain: int = randi_range(1, 6)
+		level_bonus_hp += hp_gain
+		level_bonus_damage += 2
+		_update_stats_for_level()
+		hp = max_hp   # fully heal on level-up
+		required = get_xp_required_for_next_level()
+	refresh_labels()
 
-## Called when unit dies
-func on_death() -> void:
-	print("%s has been defeated!" % name)
-	# Unit will be removed by battle controller
+func _update_stats_for_level() -> void:
+	# Update attack_power, defense, and max_hp based on current level.
+	max_hp = base_max_hp + level_bonus_hp
+	if level >= 2:
+		defense = 1
+	else:
+		defense = 0
+	attack_power = get_max_damage_for_level()
+	if hp > max_hp:
+		hp = max_hp
 
-## Check if unit is alive
-func is_alive() -> bool:
-	return hp > 0
+func _update_progress_labels() -> void:
+	if level_label:
+		level_label.text = "Level%d %s %d" % [level, unit_type, unit_index]
+	if xp_label:
+		xp_label.text = "(%d/%d)" % [xp, get_xp_required_for_next_level()]
+
+func get_rarity_name() -> String:
+	match rarity:
+		Rarity.COMMON:
+			return "Common"
+		Rarity.UNCOMMON:
+			return "Uncommon"
+		Rarity.RARE:
+			return "Rare"
+		Rarity.EPIC:
+			return "Epic"
+		Rarity.LEGENDARY:
+			return "Legendary"
+	return "Unknown"
+
+func get_display_name() -> String:
+	return "Level%d %s %d" % [level, unit_type, unit_index]
+
+func get_damage_expression() -> String:
+	var bonus: int = base_damage_bonus + level_bonus_damage
+	if bonus == 0:
+		return "1d%d" % damage_die_sides
+	return "1d%d+%d" % [damage_die_sides, bonus]

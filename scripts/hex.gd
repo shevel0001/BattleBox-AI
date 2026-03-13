@@ -1,79 +1,95 @@
-## Hex coordinate utilities for axial coordinate system (q, r)
-## Pointy-top hexagons
-
 class_name Hex
+extends RefCounted
+## Pointy-top axial hex utilities: directions, distance, axial<->pixel, polygon.
 
-## Axial directions (q, r) for pointy-top hexes
-const DIRECTIONS = [
-	Vector2i(1, 0),   # East
-	Vector2i(1, -1),  # Northeast
-	Vector2i(0, -1),  # Northwest
-	Vector2i(-1, 0),  # West
-	Vector2i(-1, 1),  # Southwest
-	Vector2i(0, 1),   # Southeast
+# Pointy-top axial directions (q, r). Six neighbors.
+const DIRECTIONS: Array[Vector2i] = [
+	Vector2i(1, 0),   # E
+	Vector2i(1, -1),  # NE
+	Vector2i(0, -1),  # NW
+	Vector2i(-1, 0),  # W
+	Vector2i(-1, 1),  # SW
+	Vector2i(0, 1),   # SE
 ]
 
-## Hex size (radius from center to corner)
-const HEX_SIZE = 40.0
+## Returns neighbor coords for axial coord (q, r).
+static func get_neighbors(axial: Vector2i) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for d in DIRECTIONS:
+		out.append(axial + d)
+	return out
 
-## Get all 6 neighbors of an axial coordinate
-static func get_neighbors(coord: Vector2i) -> Array[Vector2i]:
-	var neighbors: Array[Vector2i] = []
-	for dir in DIRECTIONS:
-		neighbors.append(coord + dir)
-	return neighbors
+## Axial (hex) distance between two coords.
+static func axial_distance(a: Vector2i, b: Vector2i) -> int:
+	var ac := _axial_to_cube(a)
+	var bc := _axial_to_cube(b)
+	return _cube_distance(ac, bc)
 
-## Get distance between two axial coordinates
-static func distance(a: Vector2i, b: Vector2i) -> int:
-	var q1 = a.x
-	var r1 = a.y
-	var q2 = b.x
-	var r2 = b.y
-	
-	# Convert to cube coordinates
-	var s1 = -q1 - r1
-	var s2 = -q2 - r2
-	
-	# Manhattan distance in cube space
-	return (abs(q1 - q2) + abs(r1 - r2) + abs(s1 - s2)) / 2
+static func _axial_to_cube(axial: Vector2i) -> Vector3i:
+	var x := axial.x
+	var z := axial.y
+	var y := -x - z
+	return Vector3i(x, y, z)
 
-## Convert axial coordinate (q, r) to pixel position (pointy-top)
-static func axial_to_pixel(coord: Vector2i) -> Vector2:
-	var q = float(coord.x)
-	var r = float(coord.y)
-	var x = HEX_SIZE * (sqrt(3.0) * q + sqrt(3.0) / 2.0 * r)
-	var y = HEX_SIZE * (3.0 / 2.0 * r)
+static func _cube_distance(a: Vector3i, b: Vector3i) -> int:
+	return (abs(a.x - b.x) + abs(a.y - b.y) + abs(a.z - b.z)) / 2
+
+## Axial (q,r) to offset (col, row) for pointy-top odd-r rectangular layout.
+static func axial_to_offset(axial: Vector2i) -> Vector2i:
+	var q := axial.x
+	var r := axial.y
+	var col := q + (r - (r & 1)) / 2
+	return Vector2i(col, r)
+
+## Offset (col, row) to axial (q, r) for pointy-top odd-r.
+static func offset_to_axial(offset: Vector2i) -> Vector2i:
+	var col := offset.x
+	var row := offset.y
+	var q := col - (row - (row & 1)) / 2
+	return Vector2i(q, row)
+
+## Pointy-top odd-r: offset (col, row) to pixel (center of hex). Gives rectangular grid.
+static func offset_to_pixel(offset: Vector2i, radius: float) -> Vector2:
+	var col := float(offset.x)
+	var row := float(offset.y)
+	var x := radius * (sqrt(3.0) * (col + 0.5 * (int(row) % 2)))
+	var y := radius * (1.5 * row)
 	return Vector2(x, y)
 
-## Convert pixel position to approximate axial coordinate (pointy-top)
-static func pixel_to_axial(pos: Vector2) -> Vector2i:
-	var q = (sqrt(3.0) / 3.0 * pos.x - 1.0 / 3.0 * pos.y) / HEX_SIZE
-	var r = (2.0 / 3.0 * pos.y) / HEX_SIZE
-	return hex_round(Vector2(q, r))
+## Pixel to offset (pointy-top odd-r). Rounds to nearest hex.
+static func pixel_to_offset(pixel: Vector2, radius: float) -> Vector2i:
+	var row := int(round(pixel.y / (1.5 * radius)))
+	var col := int(round((pixel.x / (sqrt(3.0) * radius)) - 0.5 * (row % 2)))
+	return Vector2i(col, row)
 
-## Round fractional hex coordinates to nearest integer hex
-static func hex_round(hex: Vector2) -> Vector2i:
-	# Convert to cube coordinates
-	var q = hex.x
-	var r = hex.y
-	var s = -q - r
-	
-	# Round each component
-	var rq = round(q)
-	var rr = round(r)
-	var rs = round(s)
-	
-	# Calculate differences
-	var q_diff = abs(rq - q)
-	var r_diff = abs(rr - r)
-	var s_diff = abs(rs - s)
-	
-	# Reset the component with largest difference
-	if q_diff > r_diff and q_diff > s_diff:
-		rq = -rr - rs
-	elif r_diff > s_diff:
-		rr = -rq - rs
+## Pointy-top rectangular layout: axial (q, r) to pixel (via offset).
+static func axial_to_pixel(axial: Vector2i, radius: float) -> Vector2:
+	return offset_to_pixel(axial_to_offset(axial), radius)
+
+## Pixel to axial (rectangular layout). Rounds via offset.
+static func pixel_to_axial(pixel: Vector2, radius: float) -> Vector2i:
+	return offset_to_axial(pixel_to_offset(pixel, radius))
+
+static func _cube_round(cube: Vector3) -> Vector2i:
+	var rx := int(round(cube.x))
+	var ry := int(round(cube.y))
+	var rz := int(round(cube.z))
+	var dx := absf(float(rx) - cube.x)
+	var dy := absf(float(ry) - cube.y)
+	var dz := absf(float(rz) - cube.z)
+	if dx > dy and dx > dz:
+		rx = -ry - rz
+	elif dy > dz:
+		ry = -rx - rz
 	else:
-		rs = -rq - rr
-	
-	return Vector2i(int(rq), int(rr))
+		rz = -rx - ry
+	return Vector2i(rx, rz)
+
+## Pointy-top hex polygon (vertices in order). radius = center to vertex.
+static func make_hex_polygon(radius: float) -> PackedVector2Array:
+	var points: PackedVector2Array = []
+	for i in range(6):
+		var angle_deg := 60.0 * i
+		var angle_rad := deg_to_rad(angle_deg)
+		points.append(Vector2(radius * cos(angle_rad), radius * sin(angle_rad)))
+	return points

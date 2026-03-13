@@ -1,13 +1,17 @@
-[gd_scene load_steps=2 format=3 uid="uid://b1x8k3m4n5o6p7"]
+[gd_scene load_steps=2 format=3 uid="uid://hex_tile_001"]
 
-[ext_resource type="Script" path="res://scripts/hex_tile.gd" id="1_hex_tile"]
+[ext_resource type="Script" path="res://scripts/hex_tile.gd" id="1_script"]
 
 [node name="HexTile" type="Node2D"]
-script = ExtResource("1_hex_tile")
+script = ExtResource("1_script")
 
-[node name="Polygon2D" type="Polygon2D" parent="."]
-color = Color(0.8, 0.8, 0.8, 1)
-polygon = PackedVector2Array(0, -40, 34.64, -20, 34.64, 20, 0, 40, -34.64, 20, -34.64, -20)
+[node name="BasePoly" type="Polygon2D" parent="."]
+color = Color(0.55, 0.6, 0.55, 1)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+[node name="ClaimPoly" type="Polygon2D" parent="."]
 visible = false
+color = Color(0.2, 0.2, 1, 0.4)
+
+[node name="HighlightPoly" type="Polygon2D" parent="."]
+visible = false
+color = Color(1, 1, 0.3, 0.5)

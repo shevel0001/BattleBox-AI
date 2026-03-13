@@ -1,45 +1,52 @@
-## HexTile script - individual hex tile with coordinate and walkable state
-
 extends Node2D
 class_name HexTile
+## Single hex tile: base polygon, claim overlay, highlight overlay.
 
-var coord: Vector2i = Vector2i.ZERO
-var walkable: bool = true
-var polygon: Polygon2D
+enum Claim { NONE, RED, BLUE }
 
-func _ready():
-	polygon = get_node("Polygon2D")
-	set_color(Color(0.8, 0.8, 0.8, 1))
+@onready var base_poly: Polygon2D = $BasePoly
+@onready var claim_poly: Polygon2D = $ClaimPoly
+@onready var highlight_poly: Polygon2D = $HighlightPoly
 
-## Set the axial coordinate and update position
-func set_coord(new_coord: Vector2i) -> void:
-	coord = new_coord
-	position = Hex.axial_to_pixel(coord)
+var coord: Vector2i
+var hex_radius: float = 28.0
 
-## Set walkable state
-func set_walkable(value: bool) -> void:
-	walkable = value
-	if not walkable:
-		set_color(Color(0.3, 0.3, 0.3, 1))
+func _ready() -> void:
+	claim_poly.visible = false
+	highlight_poly.visible = false
+
+func set_coord(axial: Vector2i) -> void:
+	coord = axial
+	position = Hex.axial_to_pixel(axial, hex_radius)
+	var poly := Hex.make_hex_polygon(hex_radius)
+	if base_poly:
+		base_poly.polygon = poly
+	if claim_poly:
+		claim_poly.polygon = poly
+	if highlight_poly:
+		highlight_poly.polygon = poly
+
+func set_walkable(_walkable: bool) -> void:
+	# Reserved for future use (e.g. terrain).
+	pass
+
+func set_claim(team: Claim) -> void:
+	claim_poly.visible = (team != Claim.NONE)
+	match team:
+		Claim.NONE:
+			claim_poly.visible = false
+		Claim.RED:
+			claim_poly.color = Color(1, 0.2, 0.2, 0.4)
+			claim_poly.visible = true
+		Claim.BLUE:
+			claim_poly.color = Color(0.2, 0.2, 1, 0.4)
+			claim_poly.visible = true
+
+func set_highlight(enabled: bool) -> void:
+	highlight_poly.visible = enabled
+	if enabled:
+		highlight_poly.polygon = Hex.make_hex_polygon(hex_radius)
+		highlight_poly.color = Color(0.95, 0.95, 0.2, 0.75)
+		highlight_poly.z_index = 1
 	else:
-		set_color(Color(0.8, 0.8, 0.8, 1))
-
-## Check if tile is walkable
-func is_walkable() -> bool:
-	return walkable
-
-## Set tile color
-func set_color(color: Color) -> void:
-	if polygon:
-		polygon.color = color
-
-## Set highlighted state (for movement range)
-func set_highlighted(value: bool) -> void:
-	if polygon:
-		if value:
-			polygon.color = Color(0.4, 0.9, 0.4, 0.7)  # Green tint
-		else:
-			if walkable:
-				polygon.color = Color(0.8, 0.8, 0.8, 1)
-			else:
-				polygon.color = Color(0.3, 0.3, 0.3, 1)
+		highlight_poly.z_index = 0
