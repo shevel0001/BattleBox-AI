@@ -9,6 +9,7 @@ const MAX_HP: int = 5
 const MOVE_POINTS: int = 3
 const ATTACK_RANGE: int = 1
 const ATTACK_POWER: int = 4  # max damage on a successful hit
+const DEFAULT_PORTRAIT_PATH := "res://assets/portraits/default_unit.svg"
 
 @onready var body_poly: Polygon2D = $BodyPoly
 @onready var hp_label: Label = $LabelRoot/HpLabel
@@ -226,3 +227,46 @@ func get_damage_expression() -> String:
 	if bonus == 0:
 		return "1d%d" % damage_die_sides
 	return "1d%d+%d" % [damage_die_sides, bonus]
+
+func get_portrait_texture() -> Texture2D:
+	var team_name := "blue" if team == Team.BLUE else "red"
+	var type_name := unit_type.strip_edges().to_lower()
+	var candidates: Array[String] = []
+	
+	# Prioritize the filenames you already have in assets/portraits.
+	if type_name == "warrior":
+		candidates.append("res://assets/portraits/warrior_1a_%s.png" % team_name)
+		candidates.append("res://assets/portraits/Warrior 1a %s.png" % team_name)
+		if unit_index == 2:
+			candidates.append("res://assets/portraits/Warrior 1b %s.png" % team_name)
+			candidates.append("res://assets/portraits/Warrior 1b %s.jpg" % team_name)
+		if unit_index >= 3:
+			var tier_index := min(unit_index, 3)
+			candidates.append("res://assets/portraits/Warrior%d %s.png" % [tier_index, team_name])
+			candidates.append("res://assets/portraits/Warrior%d %s.jpg" % [tier_index, team_name])
+	elif type_name == "archer":
+		candidates.append("res://assets/portraits/archer 1a %s.jpg" % team_name)
+		candidates.append("res://assets/portraits/archer 1b %s.jpg" % team_name)
+		candidates.append("res://assets/portraits/archer 2 %s.jpg" % team_name)
+	
+	candidates.append(DEFAULT_PORTRAIT_PATH)
+	
+	for path in candidates:
+		if ResourceLoader.exists(path):
+			var tex = load(path)
+			if tex is Texture2D:
+				return tex
+	
+	return null
+
+func get_description_text() -> String:
+	var type_name := unit_type.strip_edges().to_lower()
+	var summary := "Balanced unit."
+	match type_name:
+		"warrior":
+			summary = "Frontline melee fighter. Reliable HP and defense for holding lanes."
+		"archer":
+			summary = "Ranged skirmisher. Trades toughness for flexible damage pressure."
+	
+	var rarity_note := "Rarity bonus: %s." % get_rarity_name()
+	return "%s\n%s" % [summary, rarity_note]

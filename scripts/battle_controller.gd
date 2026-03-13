@@ -50,6 +50,8 @@ var unit_info_move_label: Label
 var unit_info_level_xp_label: Label
 var unit_info_select_hint: Label
 var unit_info_title_label: Label
+var unit_info_portrait: TextureRect
+var unit_info_description_label: Label
 
 var hex_tile_scene: PackedScene
 var unit_scene: PackedScene
@@ -82,6 +84,8 @@ func _ready() -> void:
 	unit_info_level_xp_label = hud.get_node("UnitInfoPanel/VBox/LevelXpLabel")
 	unit_info_select_hint = hud.get_node("UnitInfoPanel/VBox/SelectHintLabel")
 	unit_info_title_label = hud.get_node("UnitInfoPanel/VBox/TitleLabel")
+	unit_info_portrait = hud.get_node("UnitInfoPanel/VBox/Portrait")
+	unit_info_description_label = hud.get_node("UnitInfoPanel/VBox/DescriptionLabel")
 	unit_info_panel.visible = false
 
 	hex_tile_scene = preload("res://scenes/HexTile.tscn")
@@ -363,6 +367,8 @@ func _update_selected_unit_panel() -> void:
 	unit_info_defense_label.text = "Defense: %d" % u.defense
 	unit_info_move_label.text = "Move points: %d" % u.move_points
 	unit_info_level_xp_label.text = "Level %d  XP %d/%d" % [u.level, u.xp, u.get_xp_required_for_next_level()]
+	unit_info_portrait.texture = u.get_portrait_texture()
+	unit_info_description_label.text = "Description: %s" % u.get_description_text()
 	# Hint to right-click when viewing a friendly unit that can still act
 	var show_hint: bool = (selected_unit == null and inspected_unit == u and is_instance_valid(u)
 		and u.team == active_team and not u.has_acted and actions_used_this_turn < MAX_ACTIONS_PER_TURN)
