@@ -111,7 +111,17 @@ func get_portrait_for_unit(unit: Unit) -> Texture2D:
 		team_color = "red"
 	
 	var unit_class_name = unit.unit_class.strip_edges().to_lower()
+	var unit_level_value = unit.unit_level
 	var variant_name = unit.portrait_variant.strip_edges().to_lower()
+	
+	var parsed = parse_unit_name_for_portrait(unit.name)
+	if parsed["unit_class"] != "":
+		unit_class_name = parsed["unit_class"]
+	if parsed["unit_level"] > 0:
+		unit_level_value = parsed["unit_level"]
+	if parsed["variant"] != "":
+		variant_name = parsed["variant"]
+	
 	if unit_class_name == "":
 		unit_class_name = "unit"
 	if variant_name == "":
@@ -120,14 +130,19 @@ func get_portrait_for_unit(unit: Unit) -> Texture2D:
 	var portrait_paths = [
 		"res://assets/portraits/%s_%d%s_%s.png" % [
 			unit_class_name,
-			unit.unit_level,
+			unit_level_value,
 			variant_name,
 			team_color
 		],
 		"res://assets/portraits/%s %d%s %s.png" % [
-			unit.unit_class.capitalize(),
-			unit.unit_level,
+			unit_class_name.capitalize(),
+			unit_level_value,
 			variant_name,
+			team_color
+		],
+		"res://assets/portraits/%s %d %s.png" % [
+			unit_class_name.capitalize(),
+			unit_level_value,
 			team_color
 		]
 	]
@@ -139,6 +154,37 @@ func get_portrait_for_unit(unit: Unit) -> Texture2D:
 				return loaded_resource
 	
 	return DEFAULT_UNIT_PORTRAIT
+
+func parse_unit_name_for_portrait(unit_name: String) -> Dictionary:
+	var result = {
+		"unit_class": "",
+		"unit_level": -1,
+		"variant": ""
+	}
+	
+	var normalized = unit_name.strip_edges().to_lower()
+	if normalized == "":
+		return result
+	
+	var level_regex = RegEx.new()
+	level_regex.compile("level\\s*(\\d+)")
+	var level_match = level_regex.search(normalized)
+	if level_match:
+		result["unit_level"] = int(level_match.get_string(1))
+	
+	var class_regex = RegEx.new()
+	class_regex.compile("(warrior|archer|mage|tank)")
+	var class_match = class_regex.search(normalized)
+	if class_match:
+		result["unit_class"] = class_match.get_string(1)
+	
+	var variant_regex = RegEx.new()
+	variant_regex.compile("\\d([a-z])")
+	var variant_match = variant_regex.search(normalized)
+	if variant_match:
+		result["variant"] = variant_match.get_string(1)
+	
+	return result
 
 func _unhandled_input(event: InputEvent):
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
