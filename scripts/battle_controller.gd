@@ -85,6 +85,7 @@ func _ready() -> void:
 	unit_info_select_hint = hud.get_node("UnitInfoPanel/VBox/SelectHintLabel")
 	unit_info_title_label = hud.get_node("UnitInfoPanel/VBox/TitleLabel")
 	_ensure_unit_info_panel_controls()
+	_apply_unit_info_font_overrides()
 	unit_info_panel.visible = false
 
 	hex_tile_scene = preload("res://scenes/HexTile.tscn")
@@ -102,13 +103,13 @@ func _ensure_unit_info_panel_controls() -> void:
 		return
 	
 	# Ensure panel has enough vertical room for portrait + description.
-	unit_info_panel.offset_bottom = max(unit_info_panel.offset_bottom, 560.0)
-	unit_info_panel.custom_minimum_size.y = max(unit_info_panel.custom_minimum_size.y, 540.0)
-	if unit_info_panel.size.y < 540.0:
+	unit_info_panel.offset_bottom = max(unit_info_panel.offset_bottom, 520.0)
+	unit_info_panel.custom_minimum_size.y = max(unit_info_panel.custom_minimum_size.y, 500.0)
+	if unit_info_panel.size.y < 500.0:
 		var resized := unit_info_panel.size
-		resized.y = 540.0
+		resized.y = 500.0
 		unit_info_panel.size = resized
-	vbox.custom_minimum_size.y = max(vbox.custom_minimum_size.y, 500.0)
+	vbox.custom_minimum_size.y = max(vbox.custom_minimum_size.y, 460.0)
 	
 	var portrait_node := vbox.get_node_or_null("Portrait")
 	if portrait_node is TextureRect:
@@ -119,9 +120,9 @@ func _ensure_unit_info_panel_controls() -> void:
 			portrait_node.visible = false
 		unit_info_portrait = TextureRect.new()
 		unit_info_portrait.name = "Portrait"
-		unit_info_portrait.custom_minimum_size = Vector2(200, 260)
+		unit_info_portrait.custom_minimum_size = Vector2(200, 180)
 		unit_info_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		unit_info_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		unit_info_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		vbox.add_child(unit_info_portrait)
 		if portrait_node:
 			vbox.move_child(unit_info_portrait, portrait_node.get_index())
@@ -129,6 +130,9 @@ func _ensure_unit_info_panel_controls() -> void:
 			vbox.move_child(unit_info_portrait, 1)
 	unit_info_portrait.visible = true
 	unit_info_portrait.modulate = Color(1, 1, 1, 1)
+	unit_info_portrait.custom_minimum_size = Vector2(200, 180)
+	unit_info_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	unit_info_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	
 	var description_node := vbox.get_node_or_null("DescriptionLabel")
 	if description_node is Label:
@@ -147,6 +151,33 @@ func _ensure_unit_info_panel_controls() -> void:
 		if hint_node:
 			vbox.move_child(unit_info_description_label, hint_node.get_index())
 	unit_info_description_label.visible = true
+
+func _apply_unit_info_font_overrides() -> void:
+	var gothic_font := SystemFont.new()
+	gothic_font.font_names = PackedStringArray([
+		"Cloister Black",
+		"Old English Text MT",
+		"UnifrakturCook",
+		"Goudy Text MT",
+		"Garamond",
+		"Georgia"
+	])
+	
+	var labels := [
+		unit_info_title_label,
+		unit_info_name_label,
+		unit_info_rarity_label,
+		unit_info_hp_label,
+		unit_info_damage_label,
+		unit_info_defense_label,
+		unit_info_move_label,
+		unit_info_level_xp_label,
+		unit_info_description_label,
+		unit_info_select_hint
+	]
+	for label_node in labels:
+		if label_node is Label:
+			(label_node as Label).add_theme_font_override("font", gothic_font)
 
 func _build_grid() -> void:
 	# Build 10 cols x 20 rows in rectangular (offset) layout; store tiles by axial for logic.

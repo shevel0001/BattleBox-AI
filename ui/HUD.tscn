@@ -49,14 +49,14 @@ anchor_bottom = 0.0
 offset_left = -260.0
 offset_top = 20.0
 offset_right = -20.0
-offset_bottom = 560.0
+offset_bottom = 520.0
 mouse_filter = 2
 
 [node name="VBox" type="VBoxContainer" parent="UnitInfoPanel"]
 offset_left = 8.0
 offset_top = 8.0
 offset_right = 232.0
-offset_bottom = 532.0
+offset_bottom = 492.0
 theme_override_constants/separation = 4
 mouse_filter = 2
 
@@ -65,9 +65,9 @@ theme_override_font_sizes/font_size = 18
 text = "Unit Info"
 
 [node name="Portrait" type="TextureRect" parent="UnitInfoPanel/VBox"]
-custom_minimum_size = Vector2(200, 260)
+custom_minimum_size = Vector2(200, 180)
 expand_mode = 1
-stretch_mode = 6
+stretch_mode = 5
 texture = ExtResource("1_default_portrait")
 
 [node name="NameLabel" type="Label" parent="UnitInfoPanel/VBox"]
