@@ -103,20 +103,31 @@ func _ensure_unit_info_panel_controls() -> void:
 	
 	# Ensure panel has enough vertical room for portrait + description.
 	unit_info_panel.offset_bottom = max(unit_info_panel.offset_bottom, 360.0)
+	unit_info_panel.custom_minimum_size.y = max(unit_info_panel.custom_minimum_size.y, 340.0)
+	if unit_info_panel.size.y < 340.0:
+		var resized := unit_info_panel.size
+		resized.y = 340.0
+		unit_info_panel.size = resized
+	vbox.custom_minimum_size.y = max(vbox.custom_minimum_size.y, 310.0)
 	
 	var portrait_node := vbox.get_node_or_null("Portrait")
 	if portrait_node is TextureRect:
 		unit_info_portrait = portrait_node as TextureRect
 	else:
 		if portrait_node:
-			portrait_node.queue_free()
+			portrait_node.name = "PortraitLegacy"
+			portrait_node.visible = false
 		unit_info_portrait = TextureRect.new()
 		unit_info_portrait.name = "Portrait"
 		unit_info_portrait.custom_minimum_size = Vector2(200, 160)
 		unit_info_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		unit_info_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		vbox.add_child(unit_info_portrait)
-		vbox.move_child(unit_info_portrait, 1)
+		if portrait_node:
+			vbox.move_child(unit_info_portrait, portrait_node.get_index())
+		else:
+			vbox.move_child(unit_info_portrait, 1)
+	unit_info_portrait.visible = true
 	unit_info_portrait.modulate = Color(1, 1, 1, 1)
 	
 	var description_node := vbox.get_node_or_null("DescriptionLabel")
@@ -135,6 +146,7 @@ func _ensure_unit_info_panel_controls() -> void:
 		var hint_node := vbox.get_node_or_null("SelectHintLabel")
 		if hint_node:
 			vbox.move_child(unit_info_description_label, hint_node.get_index())
+	unit_info_description_label.visible = true
 
 func _build_grid() -> void:
 	# Build 10 cols x 20 rows in rectangular (offset) layout; store tiles by axial for logic.
@@ -407,7 +419,12 @@ func _update_selected_unit_panel() -> void:
 	unit_info_move_label.text = "Move points: %d" % u.move_points
 	unit_info_level_xp_label.text = "Level %d  XP %d/%d" % [u.level, u.xp, u.get_xp_required_for_next_level()]
 	if unit_info_portrait:
-		unit_info_portrait.texture = u.get_portrait_texture()
+		var portrait_tex := u.get_portrait_texture()
+		if portrait_tex == null:
+			var fallback := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+			fallback.fill(Color(0.75, 0.15, 0.75, 1.0))
+			portrait_tex = ImageTexture.create_from_image(fallback)
+		unit_info_portrait.texture = portrait_tex
 	if unit_info_description_label:
 		unit_info_description_label.text = "Description: %s" % u.get_description_text()
 	# Hint to right-click when viewing a friendly unit that can still act
