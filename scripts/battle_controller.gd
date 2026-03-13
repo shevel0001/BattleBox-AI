@@ -84,8 +84,7 @@ func _ready() -> void:
 	unit_info_level_xp_label = hud.get_node("UnitInfoPanel/VBox/LevelXpLabel")
 	unit_info_select_hint = hud.get_node("UnitInfoPanel/VBox/SelectHintLabel")
 	unit_info_title_label = hud.get_node("UnitInfoPanel/VBox/TitleLabel")
-	unit_info_portrait = hud.get_node("UnitInfoPanel/VBox/Portrait")
-	unit_info_description_label = hud.get_node("UnitInfoPanel/VBox/DescriptionLabel")
+	_ensure_unit_info_panel_controls()
 	unit_info_panel.visible = false
 
 	hex_tile_scene = preload("res://scenes/HexTile.tscn")
@@ -96,6 +95,45 @@ func _ready() -> void:
 	_spawn_units()
 	_start_team_turn()
 	_update_hud()
+
+func _ensure_unit_info_panel_controls() -> void:
+	var vbox := unit_info_panel.get_node("VBox") as VBoxContainer
+	if vbox == null:
+		return
+	
+	# Ensure panel has enough vertical room for portrait + description.
+	unit_info_panel.offset_bottom = max(unit_info_panel.offset_bottom, 360.0)
+	
+	var portrait_node := vbox.get_node_or_null("Portrait")
+	if portrait_node is TextureRect:
+		unit_info_portrait = portrait_node as TextureRect
+	else:
+		if portrait_node:
+			portrait_node.queue_free()
+		unit_info_portrait = TextureRect.new()
+		unit_info_portrait.name = "Portrait"
+		unit_info_portrait.custom_minimum_size = Vector2(200, 160)
+		unit_info_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		unit_info_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		vbox.add_child(unit_info_portrait)
+		vbox.move_child(unit_info_portrait, 1)
+	
+	var description_node := vbox.get_node_or_null("DescriptionLabel")
+	if description_node is Label:
+		unit_info_description_label = description_node as Label
+	else:
+		if description_node:
+			description_node.queue_free()
+		unit_info_description_label = Label.new()
+		unit_info_description_label.name = "DescriptionLabel"
+		unit_info_description_label.custom_minimum_size = Vector2(0, 56)
+		unit_info_description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		unit_info_description_label.add_theme_font_size_override("font_size", 13)
+		unit_info_description_label.text = "Description: -"
+		vbox.add_child(unit_info_description_label)
+		var hint_node := vbox.get_node_or_null("SelectHintLabel")
+		if hint_node:
+			vbox.move_child(unit_info_description_label, hint_node.get_index())
 
 func _build_grid() -> void:
 	# Build 10 cols x 20 rows in rectangular (offset) layout; store tiles by axial for logic.
@@ -367,8 +405,10 @@ func _update_selected_unit_panel() -> void:
 	unit_info_defense_label.text = "Defense: %d" % u.defense
 	unit_info_move_label.text = "Move points: %d" % u.move_points
 	unit_info_level_xp_label.text = "Level %d  XP %d/%d" % [u.level, u.xp, u.get_xp_required_for_next_level()]
-	unit_info_portrait.texture = u.get_portrait_texture()
-	unit_info_description_label.text = "Description: %s" % u.get_description_text()
+	if unit_info_portrait:
+		unit_info_portrait.texture = u.get_portrait_texture()
+	if unit_info_description_label:
+		unit_info_description_label.text = "Description: %s" % u.get_description_text()
 	# Hint to right-click when viewing a friendly unit that can still act
 	var show_hint: bool = (selected_unit == null and inspected_unit == u and is_instance_valid(u)
 		and u.team == active_team and not u.has_acted and actions_used_this_turn < MAX_ACTIONS_PER_TURN)
