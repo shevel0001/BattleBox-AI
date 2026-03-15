@@ -12,7 +12,6 @@ const ATTACK_POWER: int = 4  # max damage on a successful hit
 const DEFAULT_PORTRAIT_PATH := "res://assets/portraits/default_unit.svg"
 
 @onready var body_poly: Polygon2D = $BodyPoly
-@onready var portrait_sprite: Sprite2D = get_node_or_null("PortraitSprite")
 @onready var hp_label: Label = $LabelRoot/HpLabel
 @onready var level_label: Label = $LabelRoot/LevelLabel
 @onready var xp_label: Label = $LabelRoot/XpLabel
@@ -48,40 +47,12 @@ func _ready() -> void:
 	move_points = MOVE_POINTS
 	attack_range = ATTACK_RANGE
 	randomize_rarity()
-	_apply_battlefield_visual()
+	set_team_color()
 	refresh_labels()
 
 func set_team_color() -> void:
 	if body_poly:
 		body_poly.color = Color.BLUE if team == Team.BLUE else Color.RED
-
-func _apply_battlefield_visual() -> void:
-	var portrait_texture := get_portrait_texture()
-	if portrait_sprite and portrait_texture:
-		portrait_sprite.texture = portrait_texture
-		portrait_sprite.visible = true
-		portrait_sprite.region_enabled = true
-		var tex_size := portrait_texture.get_size()
-		# Crop to upper/mid body so the portrait reads clearly at token scale.
-		portrait_sprite.region_rect = Rect2(
-			tex_size.x * 0.18,
-			tex_size.y * 0.05,
-			tex_size.x * 0.64,
-			tex_size.y * 0.55
-		)
-		var region_size := portrait_sprite.region_rect.size
-		var target_diameter: float = hex_radius * 1.25
-		var scale_factor: float = target_diameter / maxf(region_size.x, region_size.y)
-		portrait_sprite.scale = Vector2(scale_factor, scale_factor)
-		if body_poly:
-			body_poly.visible = false
-	else:
-		# Fallback to colored hex if portrait sprite/texture is unavailable.
-		set_team_color()
-		if body_poly:
-			body_poly.visible = true
-		if portrait_sprite:
-			portrait_sprite.visible = false
 
 func set_coord(new_coord: Vector2i) -> void:
 	coord = new_coord
