@@ -174,7 +174,7 @@ func _apply_unit_info_font_overrides() -> void:
 		"Georgia"
 	])
 	
-	var labels := [
+	var labels: Array[Label] = [
 		unit_info_title_label,
 		unit_info_name_label,
 		unit_info_rarity_label,
@@ -210,7 +210,7 @@ func _init_team_draft_state() -> void:
 	team_draft_counts.clear()
 	for team in draft_team_order:
 		team_points_remaining[team] = STARTING_ARMY_POINTS
-		var counts := {}
+		var counts: Dictionary = {}
 		for option in UNIT_DRAFT_OPTIONS:
 			counts[option["id"]] = 0
 		team_draft_counts[team] = counts
@@ -352,7 +352,7 @@ func _on_draft_adjust_pressed(option_id: String, delta: int) -> void:
 	if not is_draft_phase:
 		return
 	
-	var option := _get_draft_option_by_id(option_id)
+	var option: Dictionary = _get_draft_option_by_id(option_id)
 	if option.is_empty():
 		return
 	
@@ -442,8 +442,8 @@ func _handle_deploy_click(global_pos: Vector2) -> void:
 	if not _is_valid_deploy_coord(coord, deploy_team):
 		return
 	
-	var option_id := deploy_unit_queue.pop_front()
-	var option := _get_draft_option_by_id(option_id)
+	var option_id: String = String(deploy_unit_queue.pop_front())
+	var option: Dictionary = _get_draft_option_by_id(option_id)
 	var unit_type := String(option.get("unit_type", "Warrior"))
 	_spawn_unit(coord, deploy_team, unit_type)
 	
@@ -516,21 +516,21 @@ func _clear_highlights() -> void:
 
 func _update_hud() -> void:
 	if is_draft_phase:
-		var draft_team := _get_current_draft_team()
+		var draft_team: Unit.Team = _get_current_draft_team()
 		active_team_label.text = "Select your team"
 		info_label.text = "Team %s: choose units with +/- and spend all Army points." % _team_name(draft_team)
 		log_label.text = "Army points left: %d" % int(team_points_remaining.get(draft_team, 0))
 		end_turn_button.disabled = true
 		return
 	if is_deploy_phase:
-		var rows_text := "top 3 rows" if deploy_team == Unit.Team.BLUE else "bottom 3 rows"
+		var rows_text: String = "top 3 rows" if deploy_team == Unit.Team.BLUE else "bottom 3 rows"
 		active_team_label.text = "Deploy: %s Team" % _team_name(deploy_team)
 		info_label.text = "Place your units on the %s. One unit per hex." % rows_text
 		if deploy_unit_queue.is_empty():
 			log_label.text = "Deployment complete."
 		else:
-			var next_option_id := deploy_unit_queue[0]
-			var next_option := _get_draft_option_by_id(next_option_id)
+			var next_option_id: String = String(deploy_unit_queue[0])
+			var next_option: Dictionary = _get_draft_option_by_id(next_option_id)
 			var next_name := String(next_option.get("display_name", "Unit"))
 			log_label.text = "Units left to place: %d | Next: %s" % [deploy_unit_queue.size(), next_name]
 		end_turn_button.disabled = true
