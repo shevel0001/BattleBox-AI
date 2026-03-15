@@ -4,6 +4,7 @@ extends Node2D
 const COLS: int = 10
 const ROWS: int = 20
 const HEX_RADIUS: float = 50.0
+const DEPLOY_ROWS_PER_TEAM: int = 4
 
 const STARTING_ARMY_POINTS: int = 10
 const UNIT_DRAFT_OPTIONS := [
@@ -422,7 +423,7 @@ func _is_coord_in_team_deploy_rows(coord: Vector2i, team: Unit.Team) -> bool:
 		return false
 	
 	var span: float = maxf(deploy_max_screen_y - deploy_min_screen_y, 1.0)
-	var band_size: float = span * (3.0 / float(ROWS))
+	var band_size: float = span * (float(DEPLOY_ROWS_PER_TEAM) / float(ROWS))
 	var y: float = tile_node.global_position.y
 	if team == Unit.Team.BLUE:
 		return y <= deploy_min_screen_y + band_size
@@ -552,7 +553,11 @@ func _update_hud() -> void:
 		end_turn_button.disabled = true
 		return
 	if is_deploy_phase:
-		var rows_text: String = "top 3 rows" if deploy_team == Unit.Team.BLUE else "bottom 3 rows"
+		var rows_text: String
+		if deploy_team == Unit.Team.BLUE:
+			rows_text = "top %d rows" % DEPLOY_ROWS_PER_TEAM
+		else:
+			rows_text = "bottom %d rows" % DEPLOY_ROWS_PER_TEAM
 		active_team_label.text = "Deploy: %s Team" % _team_name(deploy_team)
 		info_label.text = "Place your units on the %s. One unit per hex." % rows_text
 		if deploy_unit_queue.is_empty():
