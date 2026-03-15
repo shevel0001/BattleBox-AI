@@ -66,6 +66,9 @@ var draft_finish_button: Button
 var draft_option_count_labels: Dictionary = {}
 var draft_option_minus_buttons: Dictionary = {}
 var draft_option_plus_buttons: Dictionary = {}
+var is_deploy_phase: bool = false
+var deploy_team: Unit.Team = Unit.Team.BLUE
+var deploy_unit_queue: Array[String] = []
 
 func _ready() -> void:
 	print("Team setup: Spend 10 Army points per team, then start battle.")
@@ -201,6 +204,7 @@ func _build_grid() -> void:
 
 func _init_team_draft_state() -> void:
 	is_draft_phase = true
+	is_deploy_phase = false
 	current_draft_index = 0
 	team_points_remaining.clear()
 	team_draft_counts.clear()
@@ -383,51 +387,91 @@ func _on_draft_finish_pressed() -> void:
 	if int(team_points_remaining.get(team, 0)) != 0:
 		return
 	
+	_start_team_deployment(team)
+
+func _start_team_deployment(team: Unit.Team) -> void:
+	is_draft_phase = false
+	is_deploy_phase = true
+	deploy_team = team
+	deploy_unit_queue.clear()
+	
+	var team_counts: Dictionary = team_draft_counts.get(team, {})
+	for option in UNIT_DRAFT_OPTIONS:
+		var option_id := String(option["id"])
+		var count_value: int = int(team_counts.get(option_id, 0))
+		for _i in range(count_value):
+			deploy_unit_queue.append(option_id)
+	
+	if draft_panel:
+		draft_panel.visible = false
+	unit_info_panel.visible = false
+	selected_unit = null
+	inspected_unit = null
+	_update_deploy_highlights()
+	_update_hud()
+
+func _is_coord_in_team_deploy_rows(coord: Vector2i, team: Unit.Team) -> bool:
+	var offset := Hex.axial_to_offset(coord)
+	if team == Unit.Team.BLUE:
+		return offset.y < 3
+	return offset.y >= ROWS - 3
+
+func _is_valid_deploy_coord(coord: Vector2i, team: Unit.Team) -> bool:
+	if not grid.in_bounds(coord):
+		return false
+	if grid.is_occupied(coord):
+		return false
+	return _is_coord_in_team_deploy_rows(coord, team)
+
+func _update_deploy_highlights() -> void:
+	_clear_highlights()
+	for coord in grid.tiles:
+		if _is_valid_deploy_coord(coord, deploy_team):
+			var tile = grid.get_tile(coord)
+			if tile and tile.has_method("set_highlight"):
+				tile.set_highlight(true)
+
+func _handle_deploy_click(global_pos: Vector2) -> void:
+	if not is_deploy_phase:
+		return
+	if deploy_unit_queue.is_empty():
+		return
+	
+	var local := grid_root.get_global_transform().affine_inverse() * global_pos
+	var coord := Hex.pixel_to_axial(local, HEX_RADIUS)
+	if not _is_valid_deploy_coord(coord, deploy_team):
+		return
+	
+	var option_id := deploy_unit_queue.pop_front()
+	var option := _get_draft_option_by_id(option_id)
+	var unit_type := String(option.get("unit_type", "Warrior"))
+	_spawn_unit(coord, deploy_team, unit_type)
+	
+	if deploy_unit_queue.is_empty():
+		_finish_team_deployment()
+	else:
+		_update_deploy_highlights()
+		_update_hud()
+
+func _finish_team_deployment() -> void:
+	is_deploy_phase = false
+	_clear_highlights()
 	current_draft_index += 1
 	if current_draft_index < draft_team_order.size():
+		is_draft_phase = true
+		if draft_panel:
+			draft_panel.visible = true
 		_update_team_draft_ui()
 		_update_hud()
 		return
-	
 	_begin_battle_after_draft()
-
-func _get_spawn_offsets_for_team(team: Unit.Team, needed_count: int) -> Array[Vector2i]:
-	var spawn_offsets: Array[Vector2i] = []
-	var spawn_col: int = 1 if team == Unit.Team.BLUE else 8
-	for row in range(1, ROWS, 2):
-		spawn_offsets.append(Vector2i(spawn_col, row))
-	if needed_count > spawn_offsets.size():
-		push_warning("Not enough spawn tiles for %s team draft count (%d)." % [_team_name(team), needed_count])
-	return spawn_offsets
-
-func _spawn_units_from_draft() -> void:
-	team_spawn_counts[Unit.Team.BLUE] = 0
-	team_spawn_counts[Unit.Team.RED] = 0
-	
-	for team in draft_team_order:
-		var team_counts: Dictionary = team_draft_counts.get(team, {})
-		var total_units: int = 0
-		for option in UNIT_DRAFT_OPTIONS:
-			total_units += int(team_counts.get(String(option["id"]), 0))
-		
-		var spawn_offsets := _get_spawn_offsets_for_team(team, total_units)
-		var spawn_index: int = 0
-		for option in UNIT_DRAFT_OPTIONS:
-			var option_id := String(option["id"])
-			var count_value: int = int(team_counts.get(option_id, 0))
-			var unit_type := String(option.get("unit_type", "Warrior"))
-			for _i in range(count_value):
-				if spawn_index >= spawn_offsets.size():
-					break
-				var offset: Vector2i = spawn_offsets[spawn_index]
-				spawn_index += 1
-				_spawn_unit(Hex.offset_to_axial(offset), team, unit_type)
 
 func _begin_battle_after_draft() -> void:
 	is_draft_phase = false
+	is_deploy_phase = false
 	if draft_panel:
 		draft_panel.visible = false
-	_spawn_units_from_draft()
+	_clear_highlights()
 	_start_team_turn()
 	_update_hud()
 	log_label.text = "Team setup complete. Battle start!"
@@ -478,6 +522,19 @@ func _update_hud() -> void:
 		log_label.text = "Army points left: %d" % int(team_points_remaining.get(draft_team, 0))
 		end_turn_button.disabled = true
 		return
+	if is_deploy_phase:
+		var rows_text := "top 3 rows" if deploy_team == Unit.Team.BLUE else "bottom 3 rows"
+		active_team_label.text = "Deploy: %s Team" % _team_name(deploy_team)
+		info_label.text = "Place your units on the %s. One unit per hex." % rows_text
+		if deploy_unit_queue.is_empty():
+			log_label.text = "Deployment complete."
+		else:
+			var next_option_id := deploy_unit_queue[0]
+			var next_option := _get_draft_option_by_id(next_option_id)
+			var next_name := String(next_option.get("display_name", "Unit"))
+			log_label.text = "Units left to place: %d | Next: %s" % [deploy_unit_queue.size(), next_name]
+		end_turn_button.disabled = true
+		return
 	
 	var team_name := "BLUE" if active_team == Unit.Team.BLUE else "RED"
 	active_team_label.text = "Active: %s" % team_name
@@ -524,7 +581,7 @@ func _check_win_condition() -> void:
 		_update_hud()
 
 func _on_end_turn_pressed() -> void:
-	if is_draft_phase:
+	if is_draft_phase or is_deploy_phase:
 		return
 	if winner >= 0:
 		return
@@ -539,6 +596,10 @@ func _on_end_turn_pressed() -> void:
 	_update_hud()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_deploy_phase:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_handle_deploy_click(get_global_mouse_position())
+		return
 	if is_draft_phase:
 		return
 	if event is InputEventMouseButton and event.pressed:
