@@ -69,6 +69,8 @@ var draft_option_plus_buttons: Dictionary = {}
 var is_deploy_phase: bool = false
 var deploy_team: Unit.Team = Unit.Team.BLUE
 var deploy_unit_queue: Array[String] = []
+var deploy_min_screen_y: float = 0.0
+var deploy_max_screen_y: float = 0.0
 
 func _ready() -> void:
 	print("Team setup: Spend 10 Army points per team, then start battle.")
@@ -407,14 +409,41 @@ func _start_team_deployment(team: Unit.Team) -> void:
 	unit_info_panel.visible = false
 	selected_unit = null
 	inspected_unit = null
+	_cache_deploy_screen_bounds()
 	_update_deploy_highlights()
 	_update_hud()
 
 func _is_coord_in_team_deploy_rows(coord: Vector2i, team: Unit.Team) -> bool:
-	var offset := Hex.axial_to_offset(coord)
+	if deploy_max_screen_y <= deploy_min_screen_y:
+		return false
+	
+	var tile_node := grid.get_tile(coord) as Node2D
+	if tile_node == null:
+		return false
+	
+	var span: float = maxf(deploy_max_screen_y - deploy_min_screen_y, 1.0)
+	var band_size: float = span * (3.0 / float(ROWS))
+	var y: float = tile_node.global_position.y
 	if team == Unit.Team.BLUE:
-		return offset.y < 3
-	return offset.y >= ROWS - 3
+		return y <= deploy_min_screen_y + band_size
+	return y >= deploy_max_screen_y - band_size
+
+func _cache_deploy_screen_bounds() -> void:
+	deploy_min_screen_y = INF
+	deploy_max_screen_y = -INF
+	
+	for coord in grid.tiles:
+		var tile_node := grid.get_tile(coord) as Node2D
+		if tile_node == null:
+			continue
+		var y: float = tile_node.global_position.y
+		deploy_min_screen_y = minf(deploy_min_screen_y, y)
+		deploy_max_screen_y = maxf(deploy_max_screen_y, y)
+	
+	if deploy_min_screen_y == INF or deploy_max_screen_y == -INF:
+		var viewport_rect := get_viewport_rect()
+		deploy_min_screen_y = viewport_rect.position.y
+		deploy_max_screen_y = viewport_rect.end.y
 
 func _is_valid_deploy_coord(coord: Vector2i, team: Unit.Team) -> bool:
 	if not grid.in_bounds(coord):
