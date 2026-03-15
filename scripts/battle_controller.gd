@@ -3,7 +3,7 @@ extends Node2D
 
 const COLS: int = 10
 const ROWS: int = 20
-const HEX_RADIUS: float = 42.0
+const HEX_RADIUS: float = 50.0
 
 const STARTING_ARMY_POINTS: int = 10
 const UNIT_DRAFT_OPTIONS := [
