@@ -60,6 +60,8 @@ func _apply_battlefield_sprite() -> void:
 	if mini_sprite and portrait_texture:
 		mini_sprite.texture = portrait_texture
 		mini_sprite.visible = true
+		# Counter-rotate so sprites appear upright on the rotated board.
+		mini_sprite.rotation = deg_to_rad(-90.0)
 		mini_sprite.region_enabled = true
 		var tex_size: Vector2 = portrait_texture.get_size()
 		# Use upper-body crop so mini tokens remain readable.
