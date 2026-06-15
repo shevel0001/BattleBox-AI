@@ -12,6 +12,7 @@ const ATTACK_POWER: int = 4  # max damage on a successful hit
 const DEFAULT_PORTRAIT_PATH := "res://assets/portraits/default_unit.svg"
 
 @onready var body_poly: Polygon2D = $BodyPoly
+@onready var mini_sprite: Sprite2D = get_node_or_null("MiniSprite")
 @onready var hp_label: Label = $LabelRoot/HpLabel
 @onready var level_label: Label = $LabelRoot/LevelLabel
 @onready var xp_label: Label = $LabelRoot/XpLabel
@@ -47,12 +48,39 @@ func _ready() -> void:
 	move_points = MOVE_POINTS
 	attack_range = ATTACK_RANGE
 	randomize_rarity()
-	set_team_color()
+	_apply_battlefield_sprite()
 	refresh_labels()
 
 func set_team_color() -> void:
 	if body_poly:
 		body_poly.color = Color.BLUE if team == Team.BLUE else Color.RED
+
+func _apply_battlefield_sprite() -> void:
+	var portrait_texture: Texture2D = get_portrait_texture()
+	if mini_sprite and portrait_texture:
+		mini_sprite.texture = portrait_texture
+		mini_sprite.visible = true
+		mini_sprite.region_enabled = true
+		var tex_size: Vector2 = portrait_texture.get_size()
+		# Use upper-body crop so mini tokens remain readable.
+		mini_sprite.region_rect = Rect2(
+			tex_size.x * 0.22,
+			tex_size.y * 0.08,
+			tex_size.x * 0.56,
+			tex_size.y * 0.46
+		)
+		var region_size: Vector2 = mini_sprite.region_rect.size
+		var target_diameter: float = hex_radius * 0.72
+		var scale_factor: float = target_diameter / maxf(region_size.x, region_size.y)
+		mini_sprite.scale = Vector2(scale_factor, scale_factor)
+		if body_poly:
+			body_poly.visible = false
+	else:
+		if mini_sprite:
+			mini_sprite.visible = false
+		if body_poly:
+			body_poly.visible = true
+			set_team_color()
 
 func set_coord(new_coord: Vector2i) -> void:
 	coord = new_coord

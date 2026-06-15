@@ -9,6 +9,10 @@ script = ExtResource("1_script")
 color = Color(0.2, 0.3, 0.9, 1)
 polygon = PackedVector2Array(-12, 0, -6, -10, 6, -10, 12, 0, 6, 10, -6, 10)
 
+[node name="MiniSprite" type="Sprite2D" parent="."]
+z_index = 1
+centered = true
+
 [node name="LabelRoot" type="Node2D" parent="."]
 rotation_degrees = -90.0
 
