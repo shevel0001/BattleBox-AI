@@ -1,0 +1,48 @@
+[gd_scene load_steps=2 format=3 uid="uid://unit_001"]
+
+[ext_resource type="Script" path="res://scripts/unit.gd" id="1_script"]
+
+[node name="Unit" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="BodyPoly" type="Polygon2D" parent="."]
+color = Color(0.2, 0.3, 0.9, 1)
+polygon = PackedVector2Array(-12, 0, -6, -10, 6, -10, 12, 0, 6, 10, -6, 10)
+
+[node name="MiniSprite" type="Sprite2D" parent="."]
+z_index = 1
+centered = true
+
+[node name="LabelRoot" type="Node2D" parent="."]
+rotation_degrees = -90.0
+
+[node name="HpLabel" type="Label" parent="LabelRoot"]
+offset_left = -24.0
+offset_top = 4.0
+offset_right = 24.0
+offset_bottom = 20.0
+theme_override_font_sizes/font_size = 14
+text = "5/5"
+horizontal_alignment = 1
+vertical_alignment = 1
+alignment = 1
+
+[node name="LevelLabel" type="Label" parent="LabelRoot"]
+offset_left = -50.0
+offset_top = -24.0
+offset_right = 50.0
+offset_bottom = -8.0
+theme_override_font_sizes/font_size = 14
+text = "Level1 Warrior 1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="XpLabel" type="Label" parent="LabelRoot"]
+offset_left = -24.0
+offset_top = 22.0
+offset_right = 24.0
+offset_bottom = 38.0
+theme_override_font_sizes/font_size = 12
+text = "(0/10)"
+horizontal_alignment = 1
+vertical_alignment = 1

@@ -1,0 +1,22 @@
+[gd_scene load_steps=3 format=3 uid="uid://b71gndius2tk4"]
+
+[ext_resource type="Script" uid="uid://ci07vyersx000" path="res://scripts/battle_controller.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://ui/HUD.tscn" id="2_hud"]
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="GridRoot" type="Node2D" parent="."]
+position = Vector2(1200, 167)
+rotation = 1.5707964
+scale = Vector2(0.75, 0.75)
+
+[node name="UnitRoot" type="Node2D" parent="."]
+position = Vector2(1200, 167)
+rotation = 1.5707964
+scale = Vector2(0.75, 0.75)
+
+[node name="HUDLayer" type="CanvasLayer" parent="."]
+
+[node name="HUD" parent="HUDLayer" instance=ExtResource("2_hud")]
+layout_mode = 3
